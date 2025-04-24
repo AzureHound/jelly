@@ -1,0 +1,135 @@
+#!/bin/bash
+
+# Configuration file path
+CONFIG_FILE="$HOME/.config/jelly/config"
+
+# Ensure required commands are available
+for cmd in curl jq fzf mpv kitty; do
+  if ! command -v "$cmd" &>/dev/null; then
+    echo "Error: '$cmd' is required but not installed. Please install it and try again."
+    exit 1
+  fi
+done
+
+# Ensure configuration file exists
+if [ ! -f "$CONFIG_FILE" ]; then
+  echo "Configuration file not found at $CONFIG_FILE. Please create it with the following format:"
+  echo "server_url=http://your-jellyfin-server:8096"
+  echo "api_key=your_api_key"
+  exit 1
+fi
+
+# Source the configuration file
+source "$CONFIG_FILE"
+
+# Check required parameters
+if [ -z "$server_url" ] || [ -z "$api_key" ]; then
+  echo "Missing configuration values in $CONFIG_FILE. Please ensure it contains server_url and api_key."
+  exit 1
+fi
+
+# Define custom fzf options
+export FZF_DEFAULT_OPTS='
+    --color=fg:#cad3f5,fg+:#cad3f5,bg:-1,bg+:-1
+    --color=hl:#5f87af,hl+:#5fd7ff,info:#eed49f,marker:#87ff00
+    --color=prompt:#ed8796,spinner:#f4dbd6,pointer:#f4dbd6,header:#b7bdf8
+    --color=border:#494d64,label:#aeaeae,query:#d9d9d9,separator:#d0d0d0
+    --border="rounded" --border-label=" Jellyfin "
+    --marker=">" --pointer="" --separator="─" --scrollbar="│"
+    --prompt="  󰥨 Search: "
+'
+
+# Fetch user ID
+fetch_user_id() {
+  curl -s -X GET -H "X-Emby-Token: $api_key" "$server_url/Users" | jq -r '.[0].Id'
+}
+
+# Fetch libraries
+fetch_libraries() {
+  user_id=$(fetch_user_id)
+  curl -s -X GET -H "X-Emby-Token: $api_key" "$server_url/Users/$user_id/Views" | jq -r '.Items[] | "\(.Id)|\(.Name)"'
+}
+
+# Fetch media list for a specific library
+fetch_media() {
+  local library_id=$1
+  curl -s -X GET -H "X-Emby-Token: $api_key" \
+    "$server_url/Items?ParentId=$library_id&IncludeItemTypes=Movie,Series&Recursive=true" | jq -r '.Items[] | "\(.Id)|\(.Type)|\(.Name)"'
+}
+
+# Fetch episodes for a series
+fetch_episodes() {
+  local series_id=$1
+  curl -s -X GET -H "X-Emby-Token: $api_key" \
+    "$server_url/Items?ParentId=$series_id&IncludeItemTypes=Episode&Recursive=true" | jq -r '.Items[] | "\(.Id)|\(.Name)"'
+}
+
+# Play media
+play_media() {
+  local id=$1
+  local name=$2
+  local playback_url="$server_url/Videos/$id/stream.mp4?X-Emby-Token=$api_key"
+
+  # Redirect MPV output to /dev/null to suppress terminal printouts
+  mpv "$playback_url" --force-media-title="$name" >/dev/null 2>&1
+}
+
+# Main script
+main() {
+  while true; do
+    local libraries_list library_selected library_id media_list selected media_type media_name media_id
+
+    # Fetch libraries and allow the user to select one
+    libraries_list=$(fetch_libraries | awk -F'|' '{print "📂 " $2}')
+    [ -z "$libraries_list" ] && exit 1
+
+    library_selected=$(echo "$libraries_list" | fzf)
+    if [ $? -ne 0 ]; then
+      # If Escape is pressed, exit the script
+      exit 0
+    fi
+    [ -z "$library_selected" ] && continue
+
+    library_id=$(fetch_libraries | grep "|$(echo "$library_selected" | sed 's/📂 //')$" | awk -F'|' '{print $1}')
+    while true; do
+      media_list=$(fetch_media "$library_id" | awk -F'|' '{
+        if ($2 == "Movie") print "🎬 " $3;
+        else if ($2 == "Series") print "📺 " $3;
+      }')
+      [ -z "$media_list" ] && break
+
+      selected=$(echo "$media_list" | fzf)
+      if [ $? -ne 0 ]; then
+        # If Escape is pressed, go back to the library selection
+        break
+      fi
+      [ -z "$selected" ] && continue
+
+      # Get the corresponding media ID and type
+      media_id=$(fetch_media "$library_id" | grep "|$(echo "$selected" | sed 's/[🎬📺] //')$" | awk -F'|' '{print $1}')
+      media_type=$(fetch_media "$library_id" | grep "|$(echo "$selected" | sed 's/[🎬📺] //')$" | awk -F'|' '{print $2}')
+      media_name=$(echo "$selected" | sed 's/[🎬📺] //')
+
+      if [[ "$media_type" == "Movie" ]]; then
+        # Play movie directly
+        play_media "$media_id" "$media_name"
+      elif [[ "$media_type" == "Series" ]]; then
+        # Fetch episodes for the series
+        episodes_list=$(fetch_episodes "$media_id" | awk -F'|' '{print "📺 " $2}')
+        [ -z "$episodes_list" ] && continue
+
+        episode_selected=$(echo "$episodes_list" | fzf)
+        if [ $? -ne 0 ]; then
+          # If Escape is pressed, go back to the media selection
+          continue
+        fi
+        [ -z "$episode_selected" ] && continue
+
+        episode_id=$(fetch_episodes "$media_id" | grep "|$(echo "$episode_selected" | sed 's/📺 //')$" | awk -F'|' '{print $1}')
+        play_media "$episode_id" "$episode_selected"
+      fi
+    done
+  done
+}
+
+main
