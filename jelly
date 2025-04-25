@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Configuration file path
+# Config file path
 CONFIG_FILE="$HOME/.config/jelly/config"
 
 # Ensure required commands are available
-for cmd in curl jq fzf mpv kitty; do
+for cmd in curl jq fzf mpv; do
   if ! command -v "$cmd" &>/dev/null; then
     echo -e "\033[31mError:\033[0m '$cmd' is required but not installed."
     exit 1
@@ -24,7 +24,7 @@ EOL
   exit 1
 fi
 
-# Source the configuration file
+# Source the config file
 source "$CONFIG_FILE"
 
 # Check required parameters
