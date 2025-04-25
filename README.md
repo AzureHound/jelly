@@ -32,11 +32,11 @@ A lightweight command-line tool to explore and stream your Jellyfin media direct
 3. Install `curl jq fzf mpv`:
 
    ```bash
-   sudo apt install curl jq fzf mpv  # For Debian/Ubuntu
+   sudo pacman -S curl jq fzf mpv  # For Arch Linux
    ```
 
    ```bash
-   sudo pacman -S curl jq fzf mpv  # For Arch Linux
+   sudo apt install curl jq fzf mpv  # For Debian/Ubuntu
    ```
 
 ---
@@ -46,7 +46,7 @@ A lightweight command-line tool to explore and stream your Jellyfin media direct
 Create a config file at `~/.config/jelly/config`:
 
 ```ini
-server_url=http://your-jellyfin-server:8096
+server=http://your-jellyfin-server:8096
 api_key=your-api-key
 ```
 
