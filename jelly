@@ -6,16 +6,21 @@ CONFIG_FILE="$HOME/.config/jelly/config"
 # Ensure required commands are available
 for cmd in curl jq fzf mpv kitty; do
   if ! command -v "$cmd" &>/dev/null; then
-    echo "Error: '$cmd' is required but not installed. Please install it and try again."
+    echo -e "\033[31mError:\033[0m '$cmd' is required but not installed."
     exit 1
   fi
 done
 
-# Ensure configuration file exists
+# Ensure config file exists or create one
 if [ ! -f "$CONFIG_FILE" ]; then
-  echo "Configuration file not found at $CONFIG_FILE. Please create it with the following format:"
-  echo "server_url=http://your-jellyfin-server:8096"
-  echo "api_key=your_api_key"
+  echo "Config file missing, Creating one at $CONFIG_FILE"
+  mkdir -p "$(dirname "$CONFIG_FILE")"
+  cat >"$CONFIG_FILE" <<EOL
+# Jelly Config
+server=http://your-jellyfin-server:8096
+api_key=your_api_key
+EOL
+  echo "Update it with your Server URL & API key."
   exit 1
 fi
 
@@ -23,8 +28,15 @@ fi
 source "$CONFIG_FILE"
 
 # Check required parameters
-if [ -z "$server_url" ] || [ -z "$api_key" ]; then
-  echo "Missing configuration values in $CONFIG_FILE. Please ensure it contains server_url and api_key."
+if [ -z "$server" ] || [ -z "$api_key" ]; then
+  echo -e "\033[31mError:\033[0m Config file is missing 'server' or 'api_key'."
+  exit 1
+fi
+
+# Check if the server is reachable
+if ! curl -s --connect-timeout 5 -o /dev/null "$server"; then
+  echo -e "\033[31mError:\033[0m Unable to reach Jellyfin Server at $server"
+  echo "Please check your config."
   exit 1
 fi
 
@@ -32,43 +44,43 @@ fi
 export FZF_DEFAULT_OPTS='
     --color=fg:#cad3f5,fg+:#cad3f5,bg:-1,bg+:-1
     --color=hl:#5f87af,hl+:#5fd7ff,info:#eed49f,marker:#87ff00
-    --color=prompt:#ed8796,spinner:#f4dbd6,pointer:#f4dbd6,header:#b7bdf8
+    --color=prompt:#c6a0f6,spinner:#f4dbd6,pointer:#f4dbd6,header:#b7bdf8
     --color=border:#494d64,label:#aeaeae,query:#d9d9d9,separator:#d0d0d0
-    --border="rounded" --border-label=" Jellyfin "
+    --border="rounded" --border-label=" Jelly "
     --marker=">" --pointer="" --separator="─" --scrollbar="│"
     --prompt="  󰥨 Search: "
 '
 
 # Fetch user ID
 fetch_user_id() {
-  curl -s -X GET -H "X-Emby-Token: $api_key" "$server_url/Users" | jq -r '.[0].Id'
+  curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users" | jq -r '.[0].Id'
 }
 
 # Fetch libraries
 fetch_libraries() {
   user_id=$(fetch_user_id)
-  curl -s -X GET -H "X-Emby-Token: $api_key" "$server_url/Users/$user_id/Views" | jq -r '.Items[] | "\(.Id)|\(.Name)"'
+  curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users/$user_id/Views" | jq -r '.Items[] | "\(.Id)|\(.Name)"'
 }
 
 # Fetch media list for a specific library
 fetch_media() {
   local library_id=$1
   curl -s -X GET -H "X-Emby-Token: $api_key" \
-    "$server_url/Items?ParentId=$library_id&IncludeItemTypes=Movie,Series&Recursive=true" | jq -r '.Items[] | "\(.Id)|\(.Type)|\(.Name)"'
+    "$server/Items?ParentId=$library_id&IncludeItemTypes=Movie,Series&Recursive=true" | jq -r '.Items[] | "\(.Id)|\(.Type)|\(.Name)"'
 }
 
 # Fetch episodes for a series
 fetch_episodes() {
   local series_id=$1
   curl -s -X GET -H "X-Emby-Token: $api_key" \
-    "$server_url/Items?ParentId=$series_id&IncludeItemTypes=Episode&Recursive=true" | jq -r '.Items[] | "\(.Id)|\(.Name)"'
+    "$server/Items?ParentId=$series_id&IncludeItemTypes=Episode&Recursive=true" | jq -r '.Items[] | "\(.Id)|\(.Name)"'
 }
 
 # Play media
 play_media() {
   local id=$1
   local name=$2
-  local playback_url="$server_url/Videos/$id/stream.mp4?X-Emby-Token=$api_key"
+  local playback_url="$server/Videos/$id/stream.mp4?X-Emby-Token=$api_key"
 
   # Redirect MPV output to /dev/null to suppress terminal printouts
   mpv "$playback_url" --force-media-title="$name" >/dev/null 2>&1
