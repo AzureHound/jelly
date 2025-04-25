@@ -25,13 +25,18 @@ A lightweight command-line tool to explore and stream your Jellyfin media direct
 
    ```bash
    chmod +x jelly
-   sudo mv jelly /usr/local/bin/
+   mkdir -p ~/.local/bin
+   mv jelly ~/.local/bin/
    ```
 
-3. Install `fzf`:
+3. Install `curl jq fzf mpv`:
 
    ```bash
-   sudo apt install fzf  # For Debian/Ubuntu
+   sudo apt install curl jq fzf mpv  # For Debian/Ubuntu
+   ```
+
+   ```bash
+   sudo pacman -S curl jq fzf mpv  # For Arch Linux
    ```
 
 ---
