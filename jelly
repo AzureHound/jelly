@@ -3,15 +3,11 @@
 # Config file path
 CONFIG_FILE="$HOME/.config/jelly/config"
 
-# Determine the media player based on the operating system
-if [[ "$OSTYPE" == "darwin"* ]]; then
-  MEDIA_PLAYER="iina"
-else
-  MEDIA_PLAYER="mpv"
-fi
+# Determine the default media player based on the operating system
+DEFAULT_MEDIA_PLAYER=$([[ "$OSTYPE" == "darwin"* ]] && echo "iina" || echo "mpv")
 
 # Ensure required commands are available
-for cmd in curl jq fzf "$MEDIA_PLAYER"; do
+for cmd in curl jq fzf; do
   if ! command -v "$cmd" &>/dev/null; then
     echo -e "\033[31mError:\033[0m '$cmd' is required but not installed."
     exit 1
@@ -26,13 +22,23 @@ if [ ! -f "$CONFIG_FILE" ]; then
 # Jelly Config
 server=http://your-jellyfin-server:8096
 api_key=your_api_key
+player=$DEFAULT_MEDIA_PLAYER
 EOL
-  echo "Update it with your Server URL & API key."
+  echo "Update it with your Server URL, API key."
   exit 1
 fi
 
 # Source the config file
 source "$CONFIG_FILE"
+
+# Set media player from config or use default
+MEDIA_PLAYER=${player:-$DEFAULT_MEDIA_PLAYER}
+
+# Ensure the selected media player is installed
+if ! command -v "$MEDIA_PLAYER" &>/dev/null; then
+  echo -e "\033[31mError:\033[0m '$MEDIA_PLAYER' is required but not installed."
+  exit 1
+fi
 
 # Check required parameters
 if [ -z "$server" ] || [ -z "$api_key" ]; then
