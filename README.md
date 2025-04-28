@@ -32,31 +32,25 @@ A lightweight command-line tool to explore and stream your Jellyfin media direct
 3. Install `curl jq fzf mpv`:
 
    ```bash
-   sudo pacman -S curl jq fzf mpv  # For Arch Linux
+   sudo pacman -S curl jq fzf mpv  # For Arch Linux (via pacman)
+   ```
+
+   ```bash
+   yay -S curl jq fzf mpv  # For Arch Linux (via yay)
    ```
 
    ```bash
    sudo apt install curl jq fzf mpv  # For Debian/Ubuntu
    ```
 
-   For macOS, use Homebrew to install the dependencies:
-
    ```bash
-   brew install curl jq fzf
+   sudo dnf install curl jq fzf mpv  # For Fedora
    ```
 
-   For playback on macOS, it's recommended to use [IINA](https://iina.io/) as the media player instead of `mpv`. IINA provides excellent compatibility with macOS systems and integrates well with the Jellyfin CLI tool.
-
-   Steps to Install IINA:
-
-   1. Download IINA from the [official website](https://iina.io/) or install it via Homebrew:
-
-      ```bash
-      brew install --cask iina
-      ```
-
-   2. Move it to your `/Applications` folder (if not automatically done by Homebrew).
-   3. Ensure `IINA` is set as the default media player.
+   ```bash
+   brew install curl jq fzf  # For macOS
+   brew install --cask iina  # Recommended media player for macOS
+   ```
 
 ---
 
@@ -67,6 +61,13 @@ Create a config file at `~/.config/jelly/config`:
 ```ini
 server=http://your-jellyfin-server:8096
 api_key=your-api-key
+player=mpv  # Use 'mpv' for Linux
+```
+
+For macOS, replace `player=mpv` with:
+
+```ini
+player=iina  # Use 'iina' for macOS
 ```
 
 Replace `your-jellyfin-server` and `your-api-key` with your Jellyfin server details.
