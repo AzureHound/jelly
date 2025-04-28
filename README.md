@@ -39,6 +39,25 @@ A lightweight command-line tool to explore and stream your Jellyfin media direct
    sudo apt install curl jq fzf mpv  # For Debian/Ubuntu
    ```
 
+   For macOS, use Homebrew to install the dependencies:
+
+   ```bash
+   brew install curl jq fzf
+   ```
+
+   For playback on macOS, it's recommended to use [IINA](https://iina.io/) as the media player instead of `mpv`. IINA provides excellent compatibility with macOS systems and integrates well with the Jellyfin CLI tool.
+
+   Steps to Install IINA:
+
+   1. Download IINA from the [official website](https://iina.io/) or install it via Homebrew:
+
+      ```bash
+      brew install --cask iina
+      ```
+
+   2. Move it to your `/Applications` folder (if not automatically done by Homebrew).
+   3. Ensure `IINA` is set as the default media player.
+
 ---
 
 ## 🔧 Setup
