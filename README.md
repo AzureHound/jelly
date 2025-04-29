@@ -93,3 +93,11 @@ Enjoy browsing and streaming your media right from the terminal!
 ---
 
 🎉 **Happy Streaming!**
+
+## Disclaimer
+
+> [!IMPORTANT]
+>
+> This project currently fetches all it's content from user hosted Jellyfin Server.
+> The developer(s) of this application does not have any affiliation with the content providers available, and this application hosts zero content.
+> [DISCLAIMER](https://github.com/AzureHound/jelly/blob/main/DISCLAIMER.md)
