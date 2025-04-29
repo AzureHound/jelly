@@ -28,8 +28,8 @@ A lightweight command-line tool to explore and stream your Jellyfin media direct
 2. Make the script executable and move it to your `$PATH`:
 
    ```bash
-   mv jelly /usr/local/bin/
-   chmod +x /usr/local/bin/jelly
+   sudo mv jelly /usr/local/bin/
+   sudo chmod +x /usr/local/bin/jelly
    ```
 
 3. Install `curl jq fzf mpv`:
