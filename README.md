@@ -23,16 +23,10 @@ A lightweight command-line tool to explore and stream your Jellyfin media direct
    ```bash
    git clone https://github.com/AzureHound/jelly.git
    cd jelly
+   makepkg -si
    ```
 
-2. Make the script executable and move it to your `$PATH`:
-
-   ```bash
-   sudo mv jelly /usr/local/bin/
-   sudo chmod +x /usr/local/bin/jelly
-   ```
-
-3. Install `curl jq fzf mpv`:
+2. Install `curl jq fzf mpv`:
 
    ```bash
    sudo pacman -S curl jq fzf mpv  # For Arch Linux (via pacman)
