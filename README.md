@@ -2,7 +2,7 @@
 
 ### Showcase
 
-<https://github.com/AzureHound/jelly/raw/refs/heads/main/assets/jelly.mp4>
+<https://github.com/user-attachments/assets/1f43a895-11aa-4796-abd4-ec222c1ee7cb>
 
 A lightweight command-line tool to explore and stream your Jellyfin media directly in the terminal. 🚀
 
