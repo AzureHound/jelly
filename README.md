@@ -20,8 +20,16 @@ A lightweight command-line tool to explore and stream your Jellyfin media direct
 
 ### Install via AUR (Arch Linux)
 
+Using `yay`:
+
 ```bash
 yay -S jelly
+```
+
+Using `paru`:
+
+```bash
+paru -S jelly
 ```
 
 ### Build from Source
