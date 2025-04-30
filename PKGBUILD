@@ -8,7 +8,7 @@ url="https://github.com/AzureHound/jelly"
 license=('MIT')
 depends=('bash' 'curl' 'jq' 'fzf' 'mpv') # Runtime dependencies
 source=("$pkgname-$pkgver.tar.gz::https://github.com/AzureHound/jelly/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP') # Replace with the actual checksum
+sha256sums=('28249a763b045619b1daac79000db5dfdde1205cb60000a590e7c26a4baf75b7')
 
 build() {
   cd "$srcdir/$pkgname-$pkgver"
