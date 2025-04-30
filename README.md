@@ -18,6 +18,14 @@ A lightweight command-line tool to explore and stream your Jellyfin media direct
 
 ## 📦 Installation
 
+### Install via AUR (Arch Linux)
+
+```bash
+yay -S jelly
+```
+
+### Build from Source
+
 1. Clone the repository & build the package:
 
    ```bash
@@ -28,26 +36,30 @@ A lightweight command-line tool to explore and stream your Jellyfin media direct
 
 2. Install `curl jq fzf mpv` [dependencies]:
 
-   ```bash
-   sudo pacman -S curl jq fzf mpv  # For Arch Linux
-   ```
+For Arch Linux:
 
-   ```bash
-   yay -S curl jq fzf mpv  # For Arch Linux
-   ```
+```bash
+sudo pacman -S curl jq fzf mpv
+```
 
-   ```bash
-   sudo apt install curl jq fzf mpv  # For Debian/Ubuntu
-   ```
+For Debian/Ubuntu:
 
-   ```bash
-   sudo dnf install curl jq fzf mpv  # For Fedora
-   ```
+```bash
+sudo apt install curl jq fzf mpv
+```
 
-   ```bash
-   brew install curl jq fzf  # For macOS
-   brew install --cask iina  # Recommended media player for macOS
-   ```
+For Fedora:
+
+```bash
+sudo dnf install curl jq fzf mpv
+```
+
+For macOS:
+
+```bash
+brew install curl jq fzf
+brew install --cask iina  # Recommended media player for macOS
+```
 
 ---
 
