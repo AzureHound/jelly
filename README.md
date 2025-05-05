@@ -40,6 +40,7 @@ paru -S jelly
    git clone https://github.com/AzureHound/jelly.git
    cd jelly
    makepkg -si
+   ../ && rm -rf jelly
    ```
 
 2. Install `curl jq fzf mpv` [dependencies]:
