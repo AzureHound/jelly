@@ -1,6 +1,6 @@
 pkgbase = jelly
-	pkgdesc = Explore & stream Jellyfin from the terminal! 🚀
-	pkgver = 1.6.0
+	pkgdesc = Explore & stream Jellyfin from the terminal! 🪼
+	pkgver = 2.0.1
 	pkgrel = 1
 	url = https://github.com/AzureHound/jelly
 	arch = x86_64
@@ -12,7 +12,7 @@ pkgbase = jelly
 	depends = fzf
 	depends = mpv
 	depends = yajl
-	source = jelly-1.6.0.tar.gz::https://github.com/AzureHound/jelly/archive/refs/tags/v1.6.0.tar.gz
-	sha256sums = d06ad365aee7a7ef00f6546096d5b3b197904c1e28becb166353fa3bf314098f
+	source = jelly-2.0.1.tar.gz::https://github.com/AzureHound/jelly/archive/refs/tags/v2.0.1.tar.gz
+	sha256sums = SKIP
 
 pkgname = jelly
