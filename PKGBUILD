@@ -8,7 +8,7 @@ url="https://github.com/AzureHound/jelly"
 license=('0BSD')
 depends=('bash' 'curl' 'jq' 'fzf' 'mpv' 'yajl')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/AzureHound/jelly/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('d06ad365aee7a7ef00f6546096d5b3b197904c1e28becb166353fa3bf314098f')
 
 build() {
   cd "$srcdir/$pkgname-$pkgver"
