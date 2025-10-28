@@ -1,30 +1,28 @@
 # Maintainer: AzureHound <183492338+AzureHound@users.noreply.github.com>
 pkgname=jelly
-pkgver=2.0.1
+pkgver=3.0.2
 pkgrel=1
-pkgdesc="Explore & stream Jellyfin from terminal! 🪼"
-arch=('x86_64' 'armv7h') # Specify supported architectures
+pkgdesc="Explore & Stream Jellyfin from Terminal 🪼"
+arch=('any')
 url="https://github.com/AzureHound/jelly"
 license=('0BSD')
-depends=('bash' 'curl' 'jq' 'fzf' 'mpv' 'yajl')
+depends=('bash' 'curl' 'fzf' 'jq' 'mpv' 'socat')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/AzureHound/jelly/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('52b72a2cef7e07bd3b41d10028ace8cad7f5aaf4')
 
 build() {
   cd "$srcdir/$pkgname-$pkgver"
-  # Add any build steps here, if necessary
 }
 
 check() {
   cd "$srcdir/$pkgname-$pkgver"
-  # Run tests here (if applicable)
 }
 
 package() {
   cd "$srcdir/$pkgname-$pkgver"
-  # Install the main script
-  install -Dm755 jelly "$pkgdir/usr/bin/jelly"
-  # Install documentation
+  # app
+  install -Dm755 src/jelly "$pkgdir/usr/bin/jelly"
+  # docs
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }
