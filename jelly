@@ -1,65 +1,66 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 CONFIG_FILE="$HOME/.config/jelly/config"
 
+DEFAULT_EDITOR="${EDITOR:-vim}"
 DEFAULT_MEDIA_PLAYER=$([[ "$OSTYPE" == "darwin"* ]] && echo "iina" || echo "mpv")
-DEFAULT_EDITOR="vim"
 
-for cmd in curl jq fzf; do
+DEFAULT_FZF_OPTS='
+    --color=fg:#cad3f5,fg+:#cad3f5,bg:-1,bg+:-1,gutter:#24273a
+    --color=hl:#a6da95,hl+:#a6da95,info:#f4dbd6,scrollbar:#f0c6c6
+    --color=header:#8aadf4,spinner:#f4dbd6,pointer:#a6da95,prompt:#c6a0f6
+    --color=border:#494d64,label:#ed8796,separator:#b7bdf8,query:#a6da95
+    --border="rounded" --border-label=" Jelly " --separator="─" --scrollbar="│"
+    --prompt="󰥨 Search: " --pointer="❯"
+'
+
+for cmd in curl jq fzf socat; do
   if ! command -v "$cmd" &>/dev/null; then
-    echo -e "\033[31mError:\033[0m '$cmd' is required but not installed."
+    echo -e "\033[31mError:\033[0m '$cmd' is not installed."
     exit 1
   fi
 done
 
 if [ ! -f "$CONFIG_FILE" ]; then
-  echo "Config file missing, Creating one at $CONFIG_FILE"
+  echo -e "\033[32mConfig Generated\033[0m - \033[34m$CONFIG_FILE\033[0m"
   mkdir -p "$(dirname "$CONFIG_FILE")"
   cat >"$CONFIG_FILE" <<EOL
-# Jelly Config
-server=http://your-jellyfin-server:8096
+server=your_jellyfin_server_address
 api_key=your_api_key
-player=$DEFAULT_MEDIA_PLAYER
 editor=vim
-report_progress=true
-report_interval=10
+player=mpv
+
+# FZF Opts
+FZF_DEFAULT_OPTS='$DEFAULT_FZF_OPTS'
 EOL
-  echo "Update it with your Server URL, API key."
+  echo -e "\033[33mUpdate your Server URL & API Key.\033[0m"
   exit 1
 fi
 
 source "$CONFIG_FILE"
 
+EDITOR=${editor:-vim}
 MEDIA_PLAYER=${player:-$DEFAULT_MEDIA_PLAYER}
-EDITOR=${editor:-$DEFAULT_EDITOR}
-REPORT_PROGRESS=${report_progress:-true}
-REPORT_INTERVAL=${report_interval:-10}
+
+[ -z "$FZF_DEFAULT_OPTS" ] && FZF_DEFAULT_OPTS="$DEFAULT_FZF_OPTS"
 
 if ! command -v "$MEDIA_PLAYER" &>/dev/null; then
-  echo -e "\033[31mError:\033[0m '$MEDIA_PLAYER' is required but not installed."
+  echo -e "\033[31mError:\033[0m '$MEDIA_PLAYER' is not installed."
   exit 1
 fi
 
 if [ -z "$server" ] || [ -z "$api_key" ]; then
-  echo -e "\033[31mError:\033[0m Config file is missing 'server' or 'api_key'."
+  echo -e "\033[31mError:\033[0m Config Missing 'server' or 'api_key'."
   exit 1
 fi
 
 if ! curl -s --connect-timeout 5 -o /dev/null "$server"; then
-  echo -e "\033[31mError:\033[0m Unable to reach Jellyfin Server at $server"
+  echo -e "\033[31mError:\033[0m Unable to connect with Jellyfin Server - $server"
   echo "Please check your config."
   exit 1
 fi
 
-export FZF_DEFAULT_OPTS='
-    --color=fg:#cad3f5,fg+:#cad3f5,bg:-1,bg+:-1
-    --color=hl:#5f87af,hl+:#5fd7ff,info:#eed49f,marker:#87ff00
-    --color=prompt:#c6a0f6,spinner:#f4dbd6,pointer:#f4dbd6,header:#b7bdf8
-    --color=border:#494d64,label:#c6a0f6,query:#d9d9d9,separator:#d0d0d0
-    --border="rounded" --border-label=" Jelly "
-    --marker=">" --pointer="" --separator="─" --scrollbar="│"
-    --prompt="   Search: "
-'
+export FZF_DEFAULT_OPTS
 
 fetch_user_id() {
   curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users" | jq -r '.[0].Id'
@@ -139,39 +140,33 @@ play_media() {
   local id=$1
   local name=$2
   local resume_position=${3:-0}
-  # Use direct stream instead of transcoded stream
   local playback_url="$server/Videos/$id/stream?X-Emby-Token=$api_key&Static=true"
   local socket_path="/tmp/mpv-socket-$$"
 
-  # For extra safety, double-check with the server for the latest position
   local server_position=$(get_playback_progress "$id")
   if [ -n "$server_position" ] && [ "$server_position" -gt 0 ]; then
     resume_position=$server_position
   fi
 
-  # Ensure resume_position is a clean integer
   resume_position=$(echo "$resume_position" | tr -cd '0-9.' | awk '{printf "%.0f", $1}')
 
   if [ "$resume_position" -gt 0 ]; then
-    choice=$(echo -e "Resume from $(date -u -d "@$resume_position" +"%H:%M:%S")\nStart from the beginning" | fzf --header="Would you like to resume $name?")
+    choice=$(echo -e "$(date -u -d "@$resume_position" +"%H:%M:%S")\nStart from the beginning" | fzf --header="$name")
     case "$choice" in
-    "Resume from"*) ;;
     "Start from the beginning") resume_position=0 ;;
-    *)
-      echo "Operation cancelled"
+    "")
       return
       ;;
+    *) ;;
     esac
   fi
 
-  echo -e "\033[1m🎬 Now playing:\033[0m $name"
-  [ "$resume_position" -gt 0 ] && echo -e "\033[1m⏱️  Resuming from:\033[0m $(date -u -d "@$resume_position" +"%H:%M:%S")"
+  start_playback_session "$id"
 
   if [ "$MEDIA_PLAYER" = "iina" ]; then
     open -a IINA "$playback_url" --args --start-time="$resume_position" --force-media-title="$name"
   else
     if [ "$REPORT_PROGRESS" = "true" ] && command -v socat &>/dev/null; then
-      # Added recovery options and increased cache
       mpv "$playback_url" \
         --start="$resume_position" \
         --force-media-title="$name" \
@@ -206,7 +201,6 @@ play_media() {
       wait $mpv_pid
       rm -f "$socket_path"
     else
-      # Added recovery options and increased cache
       mpv "$playback_url" \
         --start="$resume_position" \
         --force-media-title="$name" \
@@ -237,7 +231,7 @@ play_media() {
 edit_config_file() {
   if ! command -v "$EDITOR" &>/dev/null; then
     echo -e "\033[31mError:\033[0m Editor '$EDITOR' is not installed."
-    echo "Please update your config file with a valid editor."
+    echo "Please update your config with a valid editor."
     read -n 1 -s -r -p "Press any key to continue..."
     return
   fi
@@ -247,11 +241,13 @@ edit_config_file() {
   source "$CONFIG_FILE"
 
   MEDIA_PLAYER=${player:-$DEFAULT_MEDIA_PLAYER}
-  EDITOR=${editor:-$DEFAULT_EDITOR}
-  REPORT_PROGRESS=${report_progress:-true}
-  REPORT_INTERVAL=${report_interval:-10}
+  EDITOR=${editor:-vim}
 
-  echo "Config reloaded!"
+  [ -z "$FZF_DEFAULT_OPTS" ] && FZF_DEFAULT_OPTS="$DEFAULT_FZF_OPTS"
+
+  export FZF_DEFAULT_OPTS
+
+  echo -e "\033[32mCONFIG RELOADED\033[0m"
   sleep 1
 }
 
@@ -259,7 +255,7 @@ main() {
   while true; do
     local main_menu_option selected_option media_id media_name resume_position
 
-    main_menu_option=$(echo -e "🍿 Continue Watching\n📺 Next Up\n🔍 Media\n📂 Libraries\n⚙️ Settings" | fzf --header="Select an Option")
+    main_menu_option=$(echo -e "🍿 Continue Watching\n📺 Next Up\n🔍 Media\n📂 Libraries\n⚙️ Settings" | fzf)
     if [ $? -ne 0 ]; then
       exit 0
     fi
@@ -267,13 +263,8 @@ main() {
     case "$main_menu_option" in
     "🍿 Continue Watching")
       watch_list=$(fetch_continue_watching | awk -F'|' '{print $3}')
-      if [ -z "$watch_list" ]; then
-        echo "No items to continue watching"
-        read -n 1 -s -r -p "Press any key to continue..."
-        continue
-      fi
 
-      selected_option=$(echo "$watch_list" | fzf --header="Select a title to resume")
+      selected_option=$(echo "$watch_list" | fzf --header="Continue Watching")
       if [ $? -ne 0 ]; then
         continue
       fi
@@ -292,7 +283,7 @@ main() {
         continue
       fi
 
-      selected_option=$(echo "$next_up_list" | fzf --header="Select a Title")
+      selected_option=$(echo "$next_up_list" | fzf --header="Next Up")
       if [ $? -ne 0 ]; then
         continue
       fi
@@ -317,7 +308,7 @@ main() {
         case "$current_view" in
         "libraries")
           libraries_list=$(fetch_libraries | awk -F'|' '{print "📂 " $2}')
-          library_selected=$(echo "$libraries_list" | fzf --header="Select a Library")
+          library_selected=$(echo "$libraries_list" | fzf --header="Libraries")
 
           if [ $? -ne 0 ]; then
             break
@@ -333,14 +324,7 @@ main() {
                 else if ($2 == "Series") print "📺 " $3;
               }')
 
-          if [ -z "$media_list" ]; then
-            echo "No media found in this library"
-            read -n 1 -s -r -p "Press any key to continue..."
-            current_view="libraries"
-            continue
-          fi
-
-          selected=$(echo "$media_list" | fzf --header="Select a Show")
+          selected=$(echo "$media_list" | fzf --header="$selected_library_name")
           if [ $? -ne 0 ]; then
             current_view="libraries"
             continue
@@ -389,14 +373,7 @@ main() {
                 }
               }')
 
-            if [ -z "$seasons_list" ]; then
-              echo "No seasons found for this series"
-              read -n 1 -s -r -p "Press any key to continue..."
-              current_view="media"
-              continue
-            fi
-
-            selected_season=$(echo "$seasons_list" | fzf --header="Select a Season")
+            selected_season=$(echo "$seasons_list" | fzf --header="$selected_media_name")
             if [ $? -ne 0 ]; then
               current_view="media"
               continue
@@ -420,18 +397,7 @@ main() {
                 printf "E%02d: %s\n", $3, $2;
             }')
 
-          if [ -z "$episodes_list" ]; then
-            echo "No episodes found for this season"
-            read -n 1 -s -r -p "Press any key to continue..."
-            if [ "$season_count" -eq 1 ]; then
-              current_view="media"
-            else
-              current_view="seasons"
-            fi
-            continue
-          fi
-
-          selected_episode=$(echo "$episodes_list" | fzf --header="Select an Episode")
+          selected_episode=$(echo "$episodes_list" | fzf --header="$season_info")
           if [ $? -ne 0 ]; then
             if [ "$season_count" -eq 1 ]; then
               current_view="media"
@@ -460,7 +426,6 @@ main() {
 
       tmp_file=$(mktemp)
 
-      echo "Gathering media data..."
       echo "$all_libraries" | while IFS="|" read -r library_id library_name; do
         fetch_media "$library_id" | awk -F'|' '{
           if ($2 == "Movie")
@@ -470,14 +435,7 @@ main() {
         }' library_name="$library_name" >>"$tmp_file"
       done
 
-      if [ ! -s "$tmp_file" ]; then
-        echo "No media found in any library"
-        rm "$tmp_file"
-        read -n 1 -s -r -p "Press any key to continue..."
-        continue
-      fi
-
-      selected=$(cat "$tmp_file" | cut -d '|' -f 1 | fzf --header="Search All Media")
+      selected=$(cut -d '|' -f 4 "$tmp_file" | fzf --header="Media" --ansi)
       if [ $? -ne 0 ]; then
         rm "$tmp_file"
         continue
@@ -526,13 +484,7 @@ main() {
                   }
                 }')
 
-              if [ -z "$seasons_list" ]; then
-                echo "No seasons found for this series"
-                read -n 1 -s -r -p "Press any key to continue..."
-                break
-              fi
-
-              selected_season=$(echo "$seasons_list" | fzf --header="Select a Season")
+              selected_season=$(echo "$seasons_list" | fzf --header="$selected_media_name")
               if [ $? -ne 0 ]; then
                 break
               fi
@@ -555,18 +507,7 @@ main() {
                   printf "E%02d: %s\n", $3, $2;
               }')
 
-            if [ -z "$episodes_list" ]; then
-              echo "No episodes found for this season"
-              read -n 1 -s -r -p "Press any key to continue..."
-              if [ "$season_count" -eq 1 ]; then
-                break
-              else
-                current_view="seasons"
-                continue
-              fi
-            fi
-
-            selected_episode=$(echo "$episodes_list" | fzf --header="Select an Episode")
+            selected_episode=$(echo "$episodes_list" | fzf --header="$season_info")
             if [ $? -ne 0 ]; then
               if [ "$season_count" -eq 1 ]; then
                 break
@@ -594,38 +535,7 @@ main() {
       ;;
 
     "⚙️ Settings")
-      setting_option=$(echo -e "🔄 Toggle Progress Reporting [$REPORT_PROGRESS]\n⏱️ Set Progress Reporting Interval [${REPORT_INTERVAL}s]\n📝 Edit Config File" |
-        fzf --header="Settings")
-
-      case "$setting_option" in
-      "🔄 Toggle Progress Reporting"*)
-        if [ "$REPORT_PROGRESS" = "true" ]; then
-          sed -i 's/report_progress=true/report_progress=false/' "$CONFIG_FILE"
-          REPORT_PROGRESS=false
-          echo -e "Progress reporting is now: \033[31mfalse\033[0m"
-        else
-          sed -i 's/report_progress=false/report_progress=true/' "$CONFIG_FILE"
-          REPORT_PROGRESS=true
-          echo -e "Progress reporting is now: \033[32mtrue\033[0m"
-        fi
-        sleep 1
-        ;;
-      "⏱️ Set Progress Reporting Interval"*)
-        echo -e "Enter new interval in seconds [current: \033[32m$REPORT_INTERVAL\033[0m]:"
-        read -r new_interval
-        if [[ "$new_interval" =~ ^[0-9]+$ ]]; then
-          sed -i "s/report_interval=$REPORT_INTERVAL/report_interval=$new_interval/" "$CONFIG_FILE"
-          REPORT_INTERVAL=$new_interval
-          echo -e "Progress reporting interval set to: \033[32m$REPORT_INTERVAL\033[0m seconds"
-        else
-          echo "Invalid input. Please enter a number."
-        fi
-        sleep 1
-        ;;
-      "📝 Edit Config File"*)
-        edit_config_file
-        ;;
-      esac
+      edit_config_file
       ;;
     esac
   done
