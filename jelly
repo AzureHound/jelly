@@ -35,6 +35,79 @@ FZF_DEFAULT_OPTS='$DEFAULT_FZF_OPTS'
 EOL
   echo -e "\033[33mUpdate your Server URL & API Key.\033[0m"
   exit 1
+else
+  needs_update=false
+
+  if ! grep -q "^server=" "$CONFIG_FILE"; then
+    needs_update=true
+  elif ! grep -q "^api_key=" "$CONFIG_FILE"; then
+    needs_update=true
+  elif ! grep -q "^editor=" "$CONFIG_FILE"; then
+    needs_update=true
+  elif ! grep -q "^player=" "$CONFIG_FILE"; then
+    needs_update=true
+  elif ! grep -q "FZF_DEFAULT_OPTS" "$CONFIG_FILE"; then
+    needs_update=true
+  elif [ "$(grep -c "^server=" "$CONFIG_FILE")" -gt 1 ]; then
+    needs_update=true
+  elif [ "$(grep -c "^api_key=" "$CONFIG_FILE")" -gt 1 ]; then
+    needs_update=true
+  elif [ "$(grep -c "^editor=" "$CONFIG_FILE")" -gt 1 ]; then
+    needs_update=true
+  elif [ "$(grep -c "^player=" "$CONFIG_FILE")" -gt 1 ]; then
+    needs_update=true
+  else
+    editor_check=$(grep "^editor=" "$CONFIG_FILE" | head -1 | cut -d'=' -f2-)
+    if [ -z "$editor_check" ]; then
+      needs_update=true
+    fi
+  fi
+
+  if [ "$needs_update" = true ]; then
+    temp_config=$(mktemp)
+    cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
+
+    server_val=$(grep "^server=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+    api_key_val=$(grep "^api_key=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+    editor_val=$(grep "^editor=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+    player_val=$(grep "^player=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+
+    [ -z "$server_val" ] && server_val="http://your-jellyfin-server:8096"
+    [ -z "$api_key_val" ] && api_key_val="your_api_key"
+    [ -z "$editor_val" ] && editor_val="vim"
+    [ -z "$player_val" ] && player_val="mpv"
+
+    echo "server=$server_val" >"$temp_config"
+    echo "api_key=$api_key_val" >>"$temp_config"
+    echo "editor=$editor_val" >>"$temp_config"
+    echo "player=$player_val" >>"$temp_config"
+    echo "" >>"$temp_config"
+    echo "# FZF Opts" >>"$temp_config"
+
+    if grep -q "FZF_DEFAULT_OPTS" "$CONFIG_FILE" 2>/dev/null; then
+      in_fzf=false
+      while IFS= read -r line; do
+        if [[ "$line" =~ FZF_DEFAULT_OPTS ]]; then
+          in_fzf=true
+        fi
+        if [ "$in_fzf" = true ]; then
+          echo "$line" >>"$temp_config"
+          if [[ "$line" == *"'"* ]] && [[ "$line" != *"FZF_DEFAULT_OPTS"* ]]; then
+            break
+          fi
+        fi
+      done <"$CONFIG_FILE"
+    else
+      cat >>"$temp_config" <<EOL
+FZF_DEFAULT_OPTS='$DEFAULT_FZF_OPTS'
+EOL
+    fi
+
+    mv "$temp_config" "$CONFIG_FILE"
+
+    echo -e "\033[33mCONFIG UPDATED!\033[0m
+Backup - ${CONFIG_FILE}.bak"
+  fi
 fi
 
 source "$CONFIG_FILE"
