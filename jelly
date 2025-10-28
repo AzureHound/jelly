@@ -148,12 +148,12 @@ fetch_continue_watching() {
 fetch_next_up() {
   user_id=$(fetch_user_id)
   curl -s -X GET -H "X-Emby-Token: $api_key" \
-    "$server/Shows/NextUp?UserId=$user_id" | jq -r '.Items[] | "\(.Id)|\(.Name)|\(.UserData.PlaybackPositionTicks|tonumber / 10000000)"'
+    "$server/Shows/NextUp?UserId=$user_id" | jq -r '.Items[] | "\(.Id)|\(.Type)|\(.SeriesName) - \(.Name)|\(.UserData.PlaybackPositionTicks|tonumber / 10000000)"'
 }
 
 fetch_libraries() {
   user_id=$(fetch_user_id)
-  curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users/$user_id/Views" | jq -r '.Items[] | "\(.Id)|\(.Name)"'
+  curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users/$user_id/Views" | jq -r '.Items[] | select(.CollectionType != "boxsets") | "\(.Id)|\(.Name)"'
 }
 
 fetch_media() {
@@ -194,19 +194,115 @@ get_playback_progress() {
   awk -v ticks="$progress" 'BEGIN { printf "%.0f", ticks / 10000000 }'
 }
 
+start_playback_session() {
+  local item_id=$1
+  local user_id=$(fetch_user_id)
+
+  local payload=$(
+    cat <<EOF
+{
+  "UserId": "$user_id",
+  "ItemId": "$item_id",
+  "PlaySessionId": "jelly-$item_id-$$",
+  "CanSeek": true,
+  "IsPaused": false,
+  "IsMuted": false,
+  "VolumeLevel": 100
+}
+EOF
+  )
+
+  curl -s -X POST \
+    -H "X-Emby-Token: $api_key" \
+    -H "X-Emby-Client: Jelly" \
+    -H "X-Emby-Device-Name: $(uname -n)" \
+    -H "X-Emby-Device-Id: $(uname -n)-$$" \
+    -H "X-Emby-Client-Version: 1.0" \
+    -H "Content-Type: application/json" \
+    -d "$payload" \
+    "$server/Sessions/Playing" >/dev/null
+}
+
 report_progress() {
   local item_id=$1
   local position_seconds=$2
+  local is_paused=${3:-false}
   local user_id=$(fetch_user_id)
-
   local position_ticks=$(awk -v seconds="$position_seconds" 'BEGIN { printf "%.0f", seconds * 10000000 }')
 
-  local payload="{\"ItemId\": \"$item_id\", \"PlaybackPositionTicks\": $position_ticks}"
+  local runtime=$(curl -s -X GET -H "X-Emby-Token: $api_key" \
+    "$server/Users/$user_id/Items/$item_id" | jq '.RunTimeTicks // 0')
 
-  curl -s -X POST -H "X-Emby-Token: $api_key" \
+  local completion_percent=0
+  if [ "$runtime" -gt 0 ]; then
+    completion_percent=$(awk -v pos="$position_ticks" -v total="$runtime" 'BEGIN { printf "%.0f", (pos / total) * 100 }')
+  fi
+
+  if [ "$completion_percent" -ge 5 ]; then
+    local played_status="false"
+    local final_position=$position_ticks
+    if [ "$completion_percent" -ge 95 ]; then
+      played_status="true"
+      final_position=0
+    fi
+
+    curl -s -X POST \
+      -H "X-Emby-Token: $api_key" \
+      -H "Content-Type: application/json" \
+      -d "{\"PlaybackPositionTicks\":$final_position,\"Played\":$played_status}" \
+      "$server/Users/$user_id/Items/$item_id/UserData" >/dev/null 2>&1
+  fi
+
+  local payload=$(
+    cat <<EOF
+{
+  "UserId": "$user_id",
+  "ItemId": "$item_id",
+  "PlaySessionId": "jelly-$item_id-$$",
+  "PositionTicks": $position_ticks,
+  "IsPaused": $is_paused,
+  "EventName": "timeupdate"
+}
+EOF
+  )
+
+  curl -s -X POST \
+    -H "X-Emby-Token: $api_key" \
+    -H "X-Emby-Client: Jelly" \
+    -H "X-Emby-Device-Name: $(uname -n)" \
+    -H "X-Emby-Device-Id: $(uname -n)-$$" \
+    -H "X-Emby-Client-Version: 1.0" \
     -H "Content-Type: application/json" \
     -d "$payload" \
-    "$server/Users/$user_id/PlayingItems/$item_id/Progress" >/dev/null
+    "$server/Sessions/Playing/Progress" >/dev/null
+}
+
+stop_playback_session() {
+  local item_id=$1
+  local position_seconds=$2
+  local user_id=$(fetch_user_id)
+  local position_ticks=$(awk -v seconds="$position_seconds" 'BEGIN { printf "%.0f", seconds * 10000000 }')
+
+  local payload=$(
+    cat <<EOF
+{
+  "UserId": "$user_id",
+  "ItemId": "$item_id",
+  "PlaySessionId": "jelly-$item_id-$$",
+  "PositionTicks": $position_ticks
+}
+EOF
+  )
+
+  curl -s -X POST \
+    -H "X-Emby-Token: $api_key" \
+    -H "X-Emby-Client: Jelly" \
+    -H "X-Emby-Device-Name: $(uname -n)" \
+    -H "X-Emby-Device-Id: $(uname -n)-$$" \
+    -H "X-Emby-Client-Version: 1.0" \
+    -H "Content-Type: application/json" \
+    -d "$payload" \
+    "$server/Sessions/Playing/Stopped" >/dev/null
 }
 
 play_media() {
@@ -239,65 +335,44 @@ play_media() {
   if [ "$MEDIA_PLAYER" = "iina" ]; then
     open -a IINA "$playback_url" --args --start-time="$resume_position" --force-media-title="$name"
   else
-    if [ "$REPORT_PROGRESS" = "true" ] && command -v socat &>/dev/null; then
-      mpv "$playback_url" \
-        --start="$resume_position" \
-        --force-media-title="$name" \
-        --force-seekable=yes \
-        --demuxer-lavf-o=fflags=+genpts \
-        --demuxer-lavf-probe-info=nostreams \
-        --demuxer-max-bytes=500MiB \
-        --cache=yes \
-        --cache-secs=60 \
-        --stream-lavf-o=reconnect_streamed=1 \
-        --stream-lavf-o=reconnect_delay_max=4 \
-        --input-ipc-server="$socket_path" &
-      mpv_pid=$!
+    mpv "$playback_url" \
+      --start="$resume_position" \
+      --force-media-title="$name" \
+      --force-seekable=yes \
+      --demuxer-lavf-o=fflags=+genpts \
+      --demuxer-lavf-probe-info=nostreams \
+      --demuxer-max-bytes=500MiB \
+      --cache=yes \
+      --cache-secs=60 \
+      --stream-lavf-o=reconnect_streamed=1 \
+      --stream-lavf-o=reconnect_delay_max=4 \
+      --input-ipc-server="$socket_path" \
+      --quiet \
+      --no-terminal &
+    mpv_pid=$!
 
-      (
-        sleep 2
-        while kill -0 $mpv_pid 2>/dev/null; do
-          if [ -S "$socket_path" ]; then
-            position=$(echo '{ "command": ["get_property", "playback-time"] }' |
-              socat - "$socket_path" 2>/dev/null |
-              grep -o '"data":[0-9.]*' | sed 's/"data"://g')
+    (
+      sleep 2
+      last_position=$resume_position
+      while kill -0 $mpv_pid 2>/dev/null; do
+        if [ -S "$socket_path" ]; then
+          position=$(echo '{ "command": ["get_property", "playback-time"] }' |
+            socat - "$socket_path" 2>/dev/null |
+            grep -o '"data":[0-9.]*' | sed 's/"data"://g')
 
-            if [[ "$position" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-              report_progress "$id" "$position"
-              echo -e "\033[2K\r\033[90mProgress: $(date -u -d "@$position" +"%H:%M:%S")\033[0m" >/dev/tty
-            fi
+          if [[ "$position" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+            last_position=$position
+            report_progress "$id" "$position" "false"
           fi
-          sleep $REPORT_INTERVAL
-        done
-      ) &
+        fi
+        sleep 2
+      done
 
-      wait $mpv_pid
-      rm -f "$socket_path"
-    else
-      mpv "$playback_url" \
-        --start="$resume_position" \
-        --force-media-title="$name" \
-        --force-seekable=yes \
-        --demuxer-lavf-o=fflags=+genpts \
-        --demuxer-lavf-probe-info=nostreams \
-        --demuxer-max-bytes=500MiB \
-        --cache=yes \
-        --cache-secs=60 \
-        --stream-lavf-o=reconnect_streamed=1 \
-        --stream-lavf-o=reconnect_delay_max=4 &
-      mpv_pid=$!
+      stop_playback_session "$id" "$last_position"
+    ) &
 
-      (
-        while kill -0 $mpv_pid 2>/dev/null; do
-          sleep $REPORT_INTERVAL
-          elapsed_seconds=$REPORT_INTERVAL
-          resume_position=$((resume_position + elapsed_seconds))
-          report_progress "$id" "$resume_position"
-        done
-      ) &
-
-      wait $mpv_pid
-    fi
+    wait $mpv_pid
+    rm -f "$socket_path"
   fi
 }
 
@@ -326,7 +401,7 @@ edit_config_file() {
 
 main() {
   while true; do
-    local main_menu_option selected_option media_id media_name resume_position
+    local main_menu_option media_id media_name resume_position selected_option
 
     main_menu_option=$(echo -e "🍿 Continue Watching\n📺 Next Up\n🔍 Media\n📂 Libraries\n⚙️ Settings" | fzf)
     if [ $? -ne 0 ]; then
@@ -349,29 +424,28 @@ main() {
       play_media "$media_id" "$media_name" "$resume_position"
       ;;
     "📺 Next Up")
-      next_up_list=$(fetch_next_up | awk -F'|' '{print $2}')
-      if [ -z "$next_up_list" ]; then
-        echo -e "\033[31mNo Next Up episodes available.\033[0m This could mean you've watched all episodes of your series or the Jellyfin server hasn't generated recommendations yet."
-        read -n 1 -s -r -p "Press any key to continue..."
-        continue
-      fi
+      next_up_list=$(fetch_next_up | awk -F'|' '{
+        if ($2 == "Episode") print "📺 " $3;
+        else if ($2 == "Movie") print "🎬 " $3;
+      }')
 
       selected_option=$(echo "$next_up_list" | fzf --header="Next Up")
       if [ $? -ne 0 ]; then
         continue
       fi
 
-      media_id=$(fetch_next_up | grep "|$selected_option|" | awk -F'|' '{print $1}')
-      media_name=$(fetch_next_up | grep "|$selected_option|" | awk -F'|' '{print $2}')
-      resume_position=$(fetch_next_up | grep "|$selected_option|" | awk -F'|' '{print $3}')
+      title_only=$(echo "$selected_option" | sed 's/^[📺🎬] //')
+      media_id=$(fetch_next_up | grep -F "|$title_only|" | awk -F'|' '{print $1}')
+      media_name=$(fetch_next_up | grep -F "|$title_only|" | awk -F'|' '{print $3}')
+      resume_position=$(fetch_next_up | grep -F "|$title_only|" | awk -F'|' '{print $4}')
 
       play_media "$media_id" "$media_name" "$resume_position"
       ;;
     "📂 Libraries")
       local current_view="libraries"
       local selected_library_id=""
+      local selected_library_name=""
       local selected_media_id=""
-      local selected_media_type=""
       local selected_media_name=""
       local season_id=""
       local season_info=""
@@ -387,7 +461,8 @@ main() {
             break
           fi
 
-          selected_library_id=$(fetch_libraries | grep "|$(echo "$library_selected" | sed 's/📂 //')$" | awk -F'|' '{print $1}')
+          selected_library_name=$(echo "$library_selected" | sed 's/📂 //')
+          selected_library_id=$(fetch_libraries | grep "|$selected_library_name$" | awk -F'|' '{print $1}')
           current_view="media"
           ;;
 
@@ -410,7 +485,6 @@ main() {
           media_name=$(echo "$item_data" | awk -F'|' '{print $3}')
 
           selected_media_id="$media_id"
-          selected_media_type="$media_type"
           selected_media_name="$media_name"
 
           resume_position=$(get_playback_progress "$media_id")
@@ -456,11 +530,12 @@ main() {
 
             if [[ "$selected_season" == "📂 Special"* ]]; then
               season_id=$(echo "$seasons_data" | grep "|Special|" | awk -F'|' '{print $1}')
+              season_info="Special"
             else
               season_id=$(echo "$seasons_data" | grep "|Season $season_number|" | awk -F'|' '{print $1}')
+              season_info="Season $season_number"
             fi
 
-            season_info="$selected_season"
             current_view="episodes"
           fi
           ;;
@@ -500,12 +575,9 @@ main() {
       tmp_file=$(mktemp)
 
       echo "$all_libraries" | while IFS="|" read -r library_id library_name; do
-        fetch_media "$library_id" | awk -F'|' '{
-          if ($2 == "Movie")
-            printf "🎬 %s [%s]|%s|%s|%s\n", $3, library_name, $1, $2, $3;
-          else if ($2 == "Series")
-            printf "📺 %s [%s]|%s|%s|%s\n", $3, library_name, $1, $2, $3;
-        }' library_name="$library_name" >>"$tmp_file"
+        fetch_media "$library_id" | awk -F'|' -v lib="$library_name" '{
+          printf "%s|%s|%s|🎬 %s {\033[38;2;238;212;159m%s\033[0m}\n", $1, $2, $3, $3, lib;
+        }' >>"$tmp_file"
       done
 
       selected=$(cut -d '|' -f 4 "$tmp_file" | fzf --header="Media" --ansi)
@@ -514,11 +586,11 @@ main() {
         continue
       fi
 
-      selected_escaped=$(echo "$selected" | sed 's/[]\[.*^$/]/\\&/g')
-      selected_data=$(grep "^$selected_escaped|" "$tmp_file")
-      media_id=$(echo "$selected_data" | cut -d '|' -f 2)
-      media_type=$(echo "$selected_data" | cut -d '|' -f 3)
-      media_name=$(echo "$selected_data" | cut -d '|' -f 4)
+      title_match=$(echo "$selected" | sed 's/^🎬 //' | sed 's/ {[^}]*}$//')
+      selected_data=$(grep "|$title_match|" "$tmp_file" | head -1)
+      media_id=$(echo "$selected_data" | cut -d '|' -f 1)
+      media_type=$(echo "$selected_data" | cut -d '|' -f 2)
+      media_name=$(echo "$selected_data" | cut -d '|' -f 3)
 
       rm "$tmp_file"
 
@@ -566,11 +638,12 @@ main() {
 
               if [[ "$selected_season" == "📂 Special"* ]]; then
                 season_id=$(echo "$seasons_data" | grep "|Special|" | awk -F'|' '{print $1}')
+                season_info="Special"
               else
                 season_id=$(echo "$seasons_data" | grep "|Season $season_number|" | awk -F'|' '{print $1}')
+                season_info="Season $season_number"
               fi
 
-              season_info="$selected_season"
               current_view="episodes"
             fi
             ;;
