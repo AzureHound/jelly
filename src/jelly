@@ -29,6 +29,8 @@ server=your_jellyfin_server_address
 api_key=your_api_key
 editor=vim
 player=mpv
+mark_continue=5
+mark_watched=95
 
 # FZF Opts
 FZF_DEFAULT_OPTS='$DEFAULT_FZF_OPTS'
@@ -46,6 +48,10 @@ else
     needs_update=true
   elif ! grep -q "^player=" "$CONFIG_FILE"; then
     needs_update=true
+  elif ! grep -q "^mark_continue=" "$CONFIG_FILE"; then
+    needs_update=true
+  elif ! grep -q "^mark_watched=" "$CONFIG_FILE"; then
+    needs_update=true
   elif ! grep -q "FZF_DEFAULT_OPTS" "$CONFIG_FILE"; then
     needs_update=true
   elif [ "$(grep -c "^server=" "$CONFIG_FILE")" -gt 1 ]; then
@@ -55,6 +61,10 @@ else
   elif [ "$(grep -c "^editor=" "$CONFIG_FILE")" -gt 1 ]; then
     needs_update=true
   elif [ "$(grep -c "^player=" "$CONFIG_FILE")" -gt 1 ]; then
+    needs_update=true
+  elif [ "$(grep -c "^mark_continue=" "$CONFIG_FILE")" -gt 1 ]; then
+    needs_update=true
+  elif [ "$(grep -c "^mark_watched=" "$CONFIG_FILE")" -gt 1 ]; then
     needs_update=true
   else
     editor_check=$(grep "^editor=" "$CONFIG_FILE" | head -1 | cut -d'=' -f2-)
@@ -71,16 +81,22 @@ else
     api_key_val=$(grep "^api_key=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
     editor_val=$(grep "^editor=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
     player_val=$(grep "^player=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+    min_progress_val=$(grep "^mark_continue=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+    watched_val=$(grep "^mark_watched=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
 
     [ -z "$server_val" ] && server_val="http://your-jellyfin-server:8096"
     [ -z "$api_key_val" ] && api_key_val="your_api_key"
     [ -z "$editor_val" ] && editor_val="vim"
     [ -z "$player_val" ] && player_val="mpv"
+    [ -z "$min_progress_val" ] && min_progress_val="5"
+    [ -z "$watched_val" ] && watched_val="95"
 
     echo "server=$server_val" >"$temp_config"
     echo "api_key=$api_key_val" >>"$temp_config"
     echo "editor=$editor_val" >>"$temp_config"
     echo "player=$player_val" >>"$temp_config"
+    echo "mark_continue=$min_progress_val" >>"$temp_config"
+    echo "mark_watched=$watched_val" >>"$temp_config"
     echo "" >>"$temp_config"
     echo "# FZF Opts" >>"$temp_config"
 
@@ -110,10 +126,20 @@ Backup - ${CONFIG_FILE}.bak"
   fi
 fi
 
-source "$CONFIG_FILE"
+server=$(grep "^server=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+api_key=$(grep "^api_key=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+editor=$(grep "^editor=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+player=$(grep "^player=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+mark_continue=$(grep "^mark_continue=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+mark_watched=$(grep "^mark_watched=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+
+eval "$(grep -A 100 "^FZF_DEFAULT_OPTS=" "$CONFIG_FILE" 2>/dev/null | sed -n "/^FZF_DEFAULT_OPTS=/,/'$/p")"
 
 EDITOR=${editor:-vim}
 MEDIA_PLAYER=${player:-$DEFAULT_MEDIA_PLAYER}
+
+MIN_PROGRESS_PERCENT=${mark_continue:-5}
+WATCHED_PERCENT=${mark_watched:-95}
 
 [ -z "$FZF_DEFAULT_OPTS" ] && FZF_DEFAULT_OPTS="$DEFAULT_FZF_OPTS"
 
@@ -238,10 +264,10 @@ report_progress() {
     completion_percent=$(awk -v pos="$position_ticks" -v total="$runtime" 'BEGIN { printf "%.0f", (pos / total) * 100 }')
   fi
 
-  if [ "$completion_percent" -ge 5 ]; then
+  if [ "$completion_percent" -ge "$MIN_PROGRESS_PERCENT" ]; then
     local played_status="false"
     local final_position=$position_ticks
-    if [ "$completion_percent" -ge 95 ]; then
+    if [ "$completion_percent" -ge "$WATCHED_PERCENT" ]; then
       played_status="true"
       final_position=0
     fi
@@ -386,10 +412,20 @@ edit_config_file() {
 
   "$EDITOR" "$CONFIG_FILE"
 
-  source "$CONFIG_FILE"
+  server=$(grep "^server=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  api_key=$(grep "^api_key=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  editor=$(grep "^editor=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  player=$(grep "^player=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  mark_continue=$(grep "^mark_continue=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  mark_watched=$(grep "^mark_watched=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+
+  eval "$(grep -A 100 "^FZF_DEFAULT_OPTS=" "$CONFIG_FILE" 2>/dev/null | sed -n "/^FZF_DEFAULT_OPTS=/,/'$/p")"
 
   MEDIA_PLAYER=${player:-$DEFAULT_MEDIA_PLAYER}
   EDITOR=${editor:-vim}
+
+  MIN_PROGRESS_PERCENT=${mark_continue:-5}
+  WATCHED_PERCENT=${mark_watched:-95}
 
   [ -z "$FZF_DEFAULT_OPTS" ] && FZF_DEFAULT_OPTS="$DEFAULT_FZF_OPTS"
 
