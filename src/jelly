@@ -142,7 +142,7 @@ fetch_user_id() {
 fetch_continue_watching() {
   user_id=$(fetch_user_id)
   curl -s -X GET -H "X-Emby-Token: $api_key" \
-    "$server/Users/$user_id/Items/Resume" | jq -r '.Items[] | "\(.Id)|\(.Type)|\(.Name)|\(.UserData.PlaybackPositionTicks|tonumber / 10000000)"'
+    "$server/Users/$user_id/Items/Resume" | jq -r '.Items[] | if .Type == "Episode" then "\(.Id)|\(.Type)|\(.SeriesName) - \(.Name)|\(.UserData.PlaybackPositionTicks|tonumber / 10000000)" else "\(.Id)|\(.Type)|\(.Name)|\(.UserData.PlaybackPositionTicks|tonumber / 10000000)" end'
 }
 
 fetch_next_up() {
@@ -410,21 +410,36 @@ main() {
 
     case "$main_menu_option" in
     "🍿 Continue Watching")
-      watch_list=$(fetch_continue_watching | awk -F'|' '{print $3}')
+      continue_watching_data=$(fetch_continue_watching)
+
+      watch_list=$(echo "$continue_watching_data" | awk -F'|' '{
+        if ($2 == "Episode") print "📺 " $3;
+        else if ($2 == "Movie") print "🎬 " $3;
+      }')
 
       selected_option=$(echo "$watch_list" | fzf --header="Continue Watching")
       if [ $? -ne 0 ]; then
         continue
       fi
 
-      media_id=$(fetch_continue_watching | grep "|$selected_option|" | awk -F'|' '{print $1}')
-      media_name=$(fetch_continue_watching | grep "|$selected_option|" | awk -F'|' '{print $3}')
-      resume_position=$(fetch_continue_watching | grep "|$selected_option|" | awk -F'|' '{print $4}')
+      title_only=$(echo "$selected_option" | sed 's/^[📺🎬] //')
+      media_id=$(echo "$continue_watching_data" | grep -F "|$title_only|" | awk -F'|' '{print $1}')
+      media_type=$(echo "$continue_watching_data" | grep -F "|$title_only|" | awk -F'|' '{print $2}')
+      display_name=$(echo "$continue_watching_data" | grep -F "|$title_only|" | awk -F'|' '{print $3}')
+      resume_position=$(echo "$continue_watching_data" | grep -F "|$title_only|" | awk -F'|' '{print $4}')
+
+      if [ "$media_type" = "Episode" ]; then
+        media_name=$(echo "$display_name" | sed 's/^.* - //')
+      else
+        media_name="$display_name"
+      fi
 
       play_media "$media_id" "$media_name" "$resume_position"
       ;;
     "📺 Next Up")
-      next_up_list=$(fetch_next_up | awk -F'|' '{
+      next_up_data=$(fetch_next_up)
+
+      next_up_list=$(echo "$next_up_data" | awk -F'|' '{
         if ($2 == "Episode") print "📺 " $3;
         else if ($2 == "Movie") print "🎬 " $3;
       }')
@@ -435,9 +450,16 @@ main() {
       fi
 
       title_only=$(echo "$selected_option" | sed 's/^[📺🎬] //')
-      media_id=$(fetch_next_up | grep -F "|$title_only|" | awk -F'|' '{print $1}')
-      media_name=$(fetch_next_up | grep -F "|$title_only|" | awk -F'|' '{print $3}')
-      resume_position=$(fetch_next_up | grep -F "|$title_only|" | awk -F'|' '{print $4}')
+      media_id=$(echo "$next_up_data" | grep -F "|$title_only|" | awk -F'|' '{print $1}')
+      media_type=$(echo "$next_up_data" | grep -F "|$title_only|" | awk -F'|' '{print $2}')
+      display_name=$(echo "$next_up_data" | grep -F "|$title_only|" | awk -F'|' '{print $3}')
+      resume_position=$(echo "$next_up_data" | grep -F "|$title_only|" | awk -F'|' '{print $4}')
+
+      if [ "$media_type" = "Episode" ]; then
+        media_name=$(echo "$display_name" | sed 's/^.* - //')
+      else
+        media_name="$display_name"
+      fi
 
       play_media "$media_id" "$media_name" "$resume_position"
       ;;
@@ -558,7 +580,7 @@ main() {
           episode_name=$(echo "$selected_episode" | sed -E 's/^E[0-9]+: (.*)/\1/')
           episode_data=$(fetch_episodes "$selected_media_id" "$season_id" | grep "|$episode_name|")
           episode_id=$(echo "$episode_data" | awk -F'|' '{print $1}')
-          episode_display_name="$selected_media_name - $season_info $selected_episode"
+          episode_display_name=$(echo "$episode_data" | awk -F'|' '{print $2}')
 
           episode_resume=$(get_playback_progress "$episode_id")
 
@@ -666,7 +688,7 @@ main() {
             episode_name=$(echo "$selected_episode" | sed -E 's/^E[0-9]+: (.*)/\1/')
             episode_data=$(fetch_episodes "$selected_media_id" "$season_id" | grep "|$episode_name|")
             episode_id=$(echo "$episode_data" | awk -F'|' '{print $1}')
-            episode_display_name="$selected_media_name - $season_info $selected_episode"
+            episode_display_name=$(echo "$episode_data" | awk -F'|' '{print $2}')
 
             episode_resume=$(get_playback_progress "$episode_id")
 
