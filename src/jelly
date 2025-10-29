@@ -128,8 +128,8 @@ if [ -z "$server" ] || [ -z "$api_key" ]; then
 fi
 
 if ! curl -s --connect-timeout 5 -o /dev/null "$server"; then
-  echo -e "\033[31mError:\033[0m Unable to connect with Jellyfin Server - $server"
-  echo "Please check your config."
+  echo -e "\033[31mError:\033[0m Connect Timeout - \033[34m$server\033[0m"
+  echo -e "\033[33mCheck your Config\033[0m"
   exit 1
 fi
 
