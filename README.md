@@ -1,10 +1,8 @@
 # 🎬 Jelly
 
-### Showcase
-
 <https://github.com/user-attachments/assets/f0b47cb3-6e19-4cd1-929a-c38f8a9fb5cf>
 
-A simple command-line tool to explore & stream your Jellyfin media right from terminal. 🚀
+**<p align="center">A simple command-line tool to explore & stream your Jellyfin media right from terminal. 🚀</p>**
 
 ### 🌟 Features
 
@@ -117,4 +115,4 @@ Edit it with your Jellyfin Server URL & API Key.
 
 ---
 
-🎉 **Happy Streaming!**
+**<p align="center">🎉 Happy Streaming!</p>**
