@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 
 CONFIG_FILE="$HOME/.config/jelly/config"
+CACHE_DIR="$HOME/.cache/jelly/Covers"
+PREVIEW_SCRIPT="$HOME/.local/share/jelly/jelly-preview"
+PREVIEW_CHECKSUM="$HOME/.local/share/jelly/.chksm"
 
 DEFAULT_EDITOR="${EDITOR:-vim}"
 DEFAULT_MEDIA_PLAYER=$([[ "$OSTYPE" == "darwin"* ]] && echo "iina" || echo "mpv")
@@ -10,16 +13,18 @@ DEFAULT_FZF_OPTS='
     --color=hl:#a6da95,hl+:#a6da95,info:#f4dbd6,scrollbar:#f0c6c6
     --color=header:#8aadf4,spinner:#f4dbd6,pointer:#a6da95,prompt:#c6a0f6
     --color=border:#494d64,label:#ed8796,separator:#b7bdf8,query:#a6da95
-    --border="rounded" --border-label=" Jelly " --separator="─" --scrollbar="│"
-    --prompt="󰥨 Search: " --pointer="❯"
+    --prompt="󰥨 Search: " --pointer="❯" --separator="─" --scrollbar="│"
+    --height=100% --padding=1
 '
 
-for cmd in curl jq fzf socat; do
+for cmd in chafa curl fzf jq mpv socat; do
   if ! command -v "$cmd" &>/dev/null; then
     echo -e "\033[31mError:\033[0m '$cmd' is not installed."
     exit 1
   fi
 done
+
+mkdir -p "$CACHE_DIR"
 
 if [ ! -f "$CONFIG_FILE" ]; then
   echo -e "\033[32mConfig Generated\033[0m - \033[34m$CONFIG_FILE\033[0m"
@@ -28,120 +33,93 @@ if [ ! -f "$CONFIG_FILE" ]; then
 server=your_jellyfin_server_address
 api_key=your_api_key
 editor=vim
+media_preview=yes
 player=mpv
-mark_continue=5
-mark_watched=95
+mark_continue_percentage=5
+mark_watched_percentage=95
 
 # FZF Opts
 FZF_DEFAULT_OPTS='$DEFAULT_FZF_OPTS'
 EOL
   echo -e "\033[33mUpdate your Server URL & API Key.\033[0m"
   exit 1
-else
-  needs_update=false
+fi
 
-  if ! grep -q "^server=" "$CONFIG_FILE"; then
+needs_update=false
+for field in server api_key editor media_preview player mark_continue_percentage mark_watched_percentage FZF_DEFAULT_OPTS; do
+  if ! grep -q "^${field}=" "$CONFIG_FILE" 2>/dev/null || [ "$(grep -c "^${field}=" "$CONFIG_FILE")" -gt 1 ]; then
     needs_update=true
-  elif ! grep -q "^api_key=" "$CONFIG_FILE"; then
-    needs_update=true
-  elif ! grep -q "^editor=" "$CONFIG_FILE"; then
-    needs_update=true
-  elif ! grep -q "^player=" "$CONFIG_FILE"; then
-    needs_update=true
-  elif ! grep -q "^mark_continue=" "$CONFIG_FILE"; then
-    needs_update=true
-  elif ! grep -q "^mark_watched=" "$CONFIG_FILE"; then
-    needs_update=true
-  elif ! grep -q "FZF_DEFAULT_OPTS" "$CONFIG_FILE"; then
-    needs_update=true
-  elif [ "$(grep -c "^server=" "$CONFIG_FILE")" -gt 1 ]; then
-    needs_update=true
-  elif [ "$(grep -c "^api_key=" "$CONFIG_FILE")" -gt 1 ]; then
-    needs_update=true
-  elif [ "$(grep -c "^editor=" "$CONFIG_FILE")" -gt 1 ]; then
-    needs_update=true
-  elif [ "$(grep -c "^player=" "$CONFIG_FILE")" -gt 1 ]; then
-    needs_update=true
-  elif [ "$(grep -c "^mark_continue=" "$CONFIG_FILE")" -gt 1 ]; then
-    needs_update=true
-  elif [ "$(grep -c "^mark_watched=" "$CONFIG_FILE")" -gt 1 ]; then
-    needs_update=true
+    break
+  fi
+done
+
+[ -z "$(grep "^editor=" "$CONFIG_FILE" | head -1 | cut -d'=' -f2-)" ] && needs_update=true
+
+if [ "$needs_update" = true ]; then
+  temp_config=$(mktemp)
+  cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
+
+  server_val=$(grep "^server=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  api_key_val=$(grep "^api_key=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  editor_val=$(grep "^editor=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  media_preview_val=$(grep "^media_preview=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  player_val=$(grep "^player=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  min_progress_val=$(grep "^mark_continue_percentage=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)
+  watched_val=$(grep "^mark_watched_percentage=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)
+
+  [ -z "$server_val" ] && server_val="http://your-jellyfin-server:8096"
+  [ -z "$api_key_val" ] && api_key_val="your_api_key"
+  [ -z "$editor_val" ] && editor_val="vim"
+  [ -z "$media_preview_val" ] && media_preview_val="yes"
+  [ -z "$player_val" ] && player_val="mpv"
+  [ -z "$min_progress_val" ] && min_progress_val="5"
+  [ -z "$watched_val" ] && watched_val="95"
+
+  {
+    echo "server=$server_val"
+    echo "api_key=$api_key_val"
+    echo "editor=$editor_val"
+    echo "media_preview=$media_preview_val"
+    echo "player=$player_val"
+    echo "mark_continue_percentage=$min_progress_val"
+    echo "mark_watched_percentage=$watched_val"
+    echo ""
+    echo "# FZF Opts"
+  } >"$temp_config"
+
+  if grep -q "FZF_DEFAULT_OPTS" "$CONFIG_FILE" 2>/dev/null; then
+    in_fzf=false
+    while IFS= read -r line; do
+      [[ "$line" =~ FZF_DEFAULT_OPTS ]] && in_fzf=true
+      [ "$in_fzf" = true ] && echo "$line" >>"$temp_config"
+      [[ "$line" == *"'"* ]] && [[ "$line" != *"FZF_DEFAULT_OPTS"* ]] && break
+    done <"$CONFIG_FILE"
   else
-    editor_check=$(grep "^editor=" "$CONFIG_FILE" | head -1 | cut -d'=' -f2-)
-    if [ -z "$editor_check" ]; then
-      needs_update=true
-    fi
+    echo "FZF_DEFAULT_OPTS='$DEFAULT_FZF_OPTS'" >>"$temp_config"
   fi
 
-  if [ "$needs_update" = true ]; then
-    temp_config=$(mktemp)
-    cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
-
-    server_val=$(grep "^server=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
-    api_key_val=$(grep "^api_key=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
-    editor_val=$(grep "^editor=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
-    player_val=$(grep "^player=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
-    min_progress_val=$(grep "^mark_continue=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
-    watched_val=$(grep "^mark_watched=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
-
-    [ -z "$server_val" ] && server_val="http://your-jellyfin-server:8096"
-    [ -z "$api_key_val" ] && api_key_val="your_api_key"
-    [ -z "$editor_val" ] && editor_val="vim"
-    [ -z "$player_val" ] && player_val="mpv"
-    [ -z "$min_progress_val" ] && min_progress_val="5"
-    [ -z "$watched_val" ] && watched_val="95"
-
-    echo "server=$server_val" >"$temp_config"
-    echo "api_key=$api_key_val" >>"$temp_config"
-    echo "editor=$editor_val" >>"$temp_config"
-    echo "player=$player_val" >>"$temp_config"
-    echo "mark_continue=$min_progress_val" >>"$temp_config"
-    echo "mark_watched=$watched_val" >>"$temp_config"
-    echo "" >>"$temp_config"
-    echo "# FZF Opts" >>"$temp_config"
-
-    if grep -q "FZF_DEFAULT_OPTS" "$CONFIG_FILE" 2>/dev/null; then
-      in_fzf=false
-      while IFS= read -r line; do
-        if [[ "$line" =~ FZF_DEFAULT_OPTS ]]; then
-          in_fzf=true
-        fi
-        if [ "$in_fzf" = true ]; then
-          echo "$line" >>"$temp_config"
-          if [[ "$line" == *"'"* ]] && [[ "$line" != *"FZF_DEFAULT_OPTS"* ]]; then
-            break
-          fi
-        fi
-      done <"$CONFIG_FILE"
-    else
-      cat >>"$temp_config" <<EOL
-FZF_DEFAULT_OPTS='$DEFAULT_FZF_OPTS'
-EOL
-    fi
-
-    mv "$temp_config" "$CONFIG_FILE"
-
-    echo -e "\033[33mCONFIG UPDATED!\033[0m
-Backup - ${CONFIG_FILE}.bak"
-  fi
+  mv "$temp_config" "$CONFIG_FILE"
+  echo -e "\033[33mCONFIG UPDATED!\033[0m\nBACKUP - \033[34m${CONFIG_FILE}.bak\033[0m"
 fi
 
 server=$(grep "^server=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
 api_key=$(grep "^api_key=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
 editor=$(grep "^editor=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+media_preview=$(grep "^media_preview=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
 player=$(grep "^player=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
-mark_continue=$(grep "^mark_continue=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
-mark_watched=$(grep "^mark_watched=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+mark_continue=$(grep "^mark_continue_percentage=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)
+mark_watched=$(grep "^mark_watched_percentage=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)
 
 eval "$(grep -A 100 "^FZF_DEFAULT_OPTS=" "$CONFIG_FILE" 2>/dev/null | sed -n "/^FZF_DEFAULT_OPTS=/,/'$/p")"
 
 EDITOR=${editor:-vim}
 MEDIA_PLAYER=${player:-$DEFAULT_MEDIA_PLAYER}
-
+MEDIA_PREVIEW=${media_preview:-yes}
 MIN_PROGRESS_PERCENT=${mark_continue:-5}
 WATCHED_PERCENT=${mark_watched:-95}
-
 [ -z "$FZF_DEFAULT_OPTS" ] && FZF_DEFAULT_OPTS="$DEFAULT_FZF_OPTS"
+
+HAS_CHAFA=$(command -v chafa &>/dev/null && echo "true" || echo "false")
 
 if ! command -v "$MEDIA_PLAYER" &>/dev/null; then
   echo -e "\033[31mError:\033[0m '$MEDIA_PLAYER' is not installed."
@@ -154,44 +132,165 @@ if [ -z "$server" ] || [ -z "$api_key" ]; then
 fi
 
 if ! curl -s --connect-timeout 5 -o /dev/null "$server"; then
-  echo -e "\033[31mError:\033[0m Connect Timeout - \033[34m$server\033[0m"
-  echo -e "\033[33mCheck your Config\033[0m"
+  echo -e "\033[31mConnect Timeout\033[0m - \033[34m$server\033[0m\n\033[33mCheck your Config\033[0m - \033[34m$CONFIG_FILE\033[0m"
   exit 1
 fi
 
 export FZF_DEFAULT_OPTS
 
+create_preview_script() {
+  mkdir -p "$(dirname "$PREVIEW_SCRIPT")"
+
+  preview_content=$(
+    cat <<'PREVIEW_EOF'
+#!/usr/bin/env bash
+data_file=$1; line=$2; server=$3; api_key=$4; cache_dir=$5; has_chafa=$6
+
+title=$(echo "$line" | sed 's/^[📺🎬📂] //' | sed 's/^E[0-9]*: //' | sed 's/ \[[^]]*\]$//' | sed 's/ {[^}]*}$//')
+item_id=""
+
+if [[ "$title" =~ ^Season\ ([0-9]+)$ ]]; then
+  season_num="${BASH_REMATCH[1]}"
+  item_id=$(awk -F'|' -v num="$season_num" '$3 + 0 == num + 0 {print $1; exit}' "$data_file" 2>/dev/null)
+elif [[ "$title" =~ ^Special:\ (.+)$ ]]; then
+  item_id=$(awk -F'|' '$3 == "null" || $3 == "" {print $1; exit}' "$data_file" 2>/dev/null)
+fi
+
+if [ -z "$item_id" ]; then
+  clean_title=$(echo "$title" | sed 's/^Special: //')
+  item_id=$(awk -F'|' -v search="$clean_title" '$2 == search {print $1; exit}' "$data_file" 2>/dev/null)
+fi
+
+[ -z "$item_id" ] && item_id=$(grep -F "$title" "$data_file" 2>/dev/null | head -1 | cut -d'|' -f1)
+[ -z "$item_id" ] && echo "No preview available" && exit 0
+
+user_id=$(curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users" | jq -r '.[0].Id')
+[ -z "$user_id" ] || [ "$user_id" = "null" ] && echo "Unable to fetch user ID" && exit 0
+
+cache_file="$cache_dir/$item_id.jpg"
+[ ! -f "$cache_file" ] || [ ! -s "$cache_file" ] && curl -s -o "$cache_file" "$server/Items/$item_id/Images/Primary?maxHeight=600&api_key=$api_key" 2>/dev/null
+
+if [ -f "$cache_file" ] && [ -s "$cache_file" ] && [ "$has_chafa" = "true" ]; then
+  preview_width=${FZF_PREVIEW_COLUMNS:-80}
+  preview_height=${FZF_PREVIEW_LINES:-40}
+  image_height=$((preview_height * 40 / 100))
+  [ "$image_height" -gt 22 ] && image_height=22
+  [ "$image_height" -lt 16 ] && image_height=16
+
+  if [[ "$TERM" == "xterm-kitty" ]] || [[ "$TERM" == "kitty" ]]; then
+    chafa --format=kitty --size="${preview_width}x${image_height}" "$cache_file" 2>/dev/null
+  else
+    chafa --format=sixel --size="${preview_width}x${image_height}" "$cache_file" 2>/dev/null
+  fi
+
+  for ((i=0; i<image_height+1; i++)); do printf '\n'; done
+fi
+
+printf '%s\n\n' "═══════════════════════════════════════════════════════════════════"
+
+item_data=$(curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users/$user_id/Items/$item_id" 2>/dev/null)
+[ -z "$item_data" ] || [ "$item_data" = "null" ] && echo "Title: $title" && echo "Type: Unknown" && exit 0
+
+item_type=$(echo "$item_data" | jq -r '.Type // "Unknown"' 2>/dev/null)
+preview_width=${FZF_PREVIEW_COLUMNS:-80}
+name=$(echo "$item_data" | jq -r '.Name // "Unknown"' 2>/dev/null)
+year=$(echo "$item_data" | jq -r '(.PremiereDate // .ProductionYear // empty) | tostring | split("-")[0]' 2>/dev/null)
+
+if [ "$item_type" = "Season" ]; then
+  if [ -z "$year" ] || [ "$year" = "null" ] || [ "$year" = "" ]; then
+    series_id=$(echo "$item_data" | jq -r '.SeriesId // empty' 2>/dev/null)
+    if [ -n "$series_id" ] && [ "$series_id" != "null" ]; then
+      first_episode=$(curl -s -X GET -H "X-Emby-Token: $api_key" \
+        "$server/Shows/$series_id/Episodes?SeasonId=$item_id&UserId=$user_id&Limit=1&Fields=PremiereDate,ProductionYear" 2>/dev/null)
+      year=$(echo "$first_episode" | jq -r '.Items[0] | (.PremiereDate // .ProductionYear // empty) | tostring | split("-")[0]' 2>/dev/null)
+    fi
+  fi
+  echo "Title: $name"
+  echo "Type: $(echo "$item_data" | jq -r '.Type // "Unknown"')"
+  [ -n "$year" ] && [ "$year" != "null" ] && [ "$year" != "" ] && echo "Year: $year"
+elif [ "$item_type" = "Series" ]; then
+  overview=$(echo "$item_data" | jq -r '.Overview // "No description available"' 2>/dev/null)
+  echo "Title: $name"
+  echo "Type: Shows"
+  [ -n "$year" ] && [ "$year" != "null" ] && [ "$year" != "" ] && echo "Year: $year"
+  echo ""
+  echo "Overview:"
+  echo "$overview" | fold -s -w "$preview_width"
+else
+  runtime=$(echo "$item_data" | jq -r 'if .RunTimeTicks then ((.RunTimeTicks / 10000000 / 60) | floor | tostring) + " min" else "Unknown" end' 2>/dev/null)
+  overview=$(echo "$item_data" | jq -r '.Overview // "No description available"' 2>/dev/null)
+  echo "Title: $name"
+  echo "Type: $(echo "$item_data" | jq -r '.Type // "Unknown"')"
+  [ -n "$year" ] && [ "$year" != "null" ] && [ "$year" != "" ] && echo "Year: $year"
+  echo "Runtime: $runtime"
+  echo ""
+  echo "Overview:"
+  echo "$overview" | fold -s -w "$preview_width"
+fi
+PREVIEW_EOF
+  )
+
+  new_checksum=$(echo "$preview_content" | md5sum | awk '{print $1}')
+  needs_update=true
+
+  if [ -f "$PREVIEW_CHECKSUM" ] && [ -f "$PREVIEW_SCRIPT" ]; then
+    old_checksum=$(cat "$PREVIEW_CHECKSUM" 2>/dev/null)
+    [ "$old_checksum" = "$new_checksum" ] && needs_update=false
+  fi
+
+  if [ "$needs_update" = true ]; then
+    echo "$preview_content" >"$PREVIEW_SCRIPT"
+    chmod +x "$PREVIEW_SCRIPT"
+    echo "$new_checksum" >"$PREVIEW_CHECKSUM"
+  fi
+}
+
+create_preview_script
+
+USER_ID_CACHE=""
+LIBRARIES_CACHE=""
+
 fetch_user_id() {
-  curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users" | jq -r '.[0].Id'
+  if [ -n "$USER_ID_CACHE" ]; then
+    echo "$USER_ID_CACHE"
+    return
+  fi
+  USER_ID_CACHE=$(curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users" | jq -r '.[0].Id')
+  echo "$USER_ID_CACHE"
 }
 
 fetch_continue_watching() {
-  user_id=$(fetch_user_id)
+  local user_id=$(fetch_user_id)
   curl -s -X GET -H "X-Emby-Token: $api_key" \
     "$server/Users/$user_id/Items/Resume" | jq -r '.Items[] | if .Type == "Episode" then "\(.Id)|\(.Type)|\(.SeriesName) - \(.Name)|\(.UserData.PlaybackPositionTicks|tonumber / 10000000)" else "\(.Id)|\(.Type)|\(.Name)|\(.UserData.PlaybackPositionTicks|tonumber / 10000000)" end'
 }
 
 fetch_next_up() {
-  user_id=$(fetch_user_id)
+  local user_id=$(fetch_user_id)
   curl -s -X GET -H "X-Emby-Token: $api_key" \
     "$server/Shows/NextUp?UserId=$user_id" | jq -r '.Items[] | "\(.Id)|\(.Type)|\(.SeriesName) - \(.Name)|\(.UserData.PlaybackPositionTicks|tonumber / 10000000)"'
 }
 
 fetch_libraries() {
-  user_id=$(fetch_user_id)
+  local user_id=$(fetch_user_id)
   curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users/$user_id/Views" | jq -r '.Items[] | select(.CollectionType != "boxsets") | "\(.Id)|\(.Name)"'
 }
 
+get_libraries_cached() {
+  if [ -z "$LIBRARIES_CACHE" ]; then
+    LIBRARIES_CACHE=$(fetch_libraries)
+  fi
+  echo "$LIBRARIES_CACHE"
+}
+
 fetch_media() {
-  local library_id=$1
   curl -s -X GET -H "X-Emby-Token: $api_key" \
-    "$server/Items?ParentId=$library_id&IncludeItemTypes=Movie,Series&Recursive=true" | jq -r '.Items[] | "\(.Id)|\(.Type)|\(.Name)"'
+    "$server/Items?ParentId=$1&IncludeItemTypes=Movie,Series&Recursive=true" | jq -r '.Items[] | "\(.Id)|\(.Type)|\(.Name)"'
 }
 
 fetch_seasons() {
-  local series_id=$1
   curl -s -X GET -H "X-Emby-Token: $api_key" \
-    "$server/Shows/$series_id/Seasons?UserId=$(fetch_user_id)" | jq -r '.Items[] | "\(.Id)|\(.Name)|\(.IndexNumber)"'
+    "$server/Shows/$1/Seasons?UserId=$(fetch_user_id)" | jq -r '.Items[] | "\(.Id)|\(.Name)|\(.IndexNumber)"'
 }
 
 fetch_episodes() {
@@ -210,124 +309,59 @@ fetch_episodes() {
 }
 
 get_playback_progress() {
-  local item_id=$1
   local user_id=$(fetch_user_id)
-
   local progress=$(curl -s -X GET -H "X-Emby-Token: $api_key" \
-    "$server/Users/$user_id/Items/$item_id" |
-    jq '.UserData.PlaybackPositionTicks // 0')
-
+    "$server/Users/$user_id/Items/$1" | jq '.UserData.PlaybackPositionTicks // 0')
   awk -v ticks="$progress" 'BEGIN { printf "%.0f", ticks / 10000000 }'
 }
 
 start_playback_session() {
-  local item_id=$1
   local user_id=$(fetch_user_id)
-
-  local payload=$(
-    cat <<EOF
-{
-  "UserId": "$user_id",
-  "ItemId": "$item_id",
-  "PlaySessionId": "jelly-$item_id-$$",
-  "CanSeek": true,
-  "IsPaused": false,
-  "IsMuted": false,
-  "VolumeLevel": 100
-}
-EOF
-  )
-
-  curl -s -X POST \
-    -H "X-Emby-Token: $api_key" \
-    -H "X-Emby-Client: Jelly" \
-    -H "X-Emby-Device-Name: $(uname -n)" \
-    -H "X-Emby-Device-Id: $(uname -n)-$$" \
-    -H "X-Emby-Client-Version: 1.0" \
-    -H "Content-Type: application/json" \
-    -d "$payload" \
+  curl -s -X POST -H "X-Emby-Token: $api_key" -H "X-Emby-Client: Jelly" \
+    -H "X-Emby-Device-Name: $(uname -n)" -H "X-Emby-Device-Id: $(uname -n)-$$" \
+    -H "X-Emby-Client-Version: 1.0" -H "Content-Type: application/json" \
+    -d "{\"UserId\":\"$user_id\",\"ItemId\":\"$1\",\"PlaySessionId\":\"jelly-$1-$$\",\"CanSeek\":true,\"IsPaused\":false,\"IsMuted\":false,\"VolumeLevel\":100}" \
     "$server/Sessions/Playing" >/dev/null
 }
 
 report_progress() {
-  local item_id=$1
-  local position_seconds=$2
-  local is_paused=${3:-false}
   local user_id=$(fetch_user_id)
-  local position_ticks=$(awk -v seconds="$position_seconds" 'BEGIN { printf "%.0f", seconds * 10000000 }')
-
+  local position_ticks=$(awk -v seconds="$2" 'BEGIN { printf "%.0f", seconds * 10000000 }')
   local runtime=$(curl -s -X GET -H "X-Emby-Token: $api_key" \
-    "$server/Users/$user_id/Items/$item_id" | jq '.RunTimeTicks // 0')
-
+    "$server/Users/$user_id/Items/$1" | jq '.RunTimeTicks // 0')
   local completion_percent=0
-  if [ "$runtime" -gt 0 ]; then
-    completion_percent=$(awk -v pos="$position_ticks" -v total="$runtime" 'BEGIN { printf "%.0f", (pos / total) * 100 }')
-  fi
+
+  [ "$runtime" -gt 0 ] && completion_percent=$(awk -v pos="$position_ticks" -v total="$runtime" 'BEGIN { printf "%.0f", (pos / total) * 100 }')
 
   if [ "$completion_percent" -ge "$MIN_PROGRESS_PERCENT" ]; then
     local played_status="false"
     local final_position=$position_ticks
+
     if [ "$completion_percent" -ge "$WATCHED_PERCENT" ]; then
       played_status="true"
       final_position=0
     fi
 
-    curl -s -X POST \
-      -H "X-Emby-Token: $api_key" \
-      -H "Content-Type: application/json" \
+    curl -s -X POST -H "X-Emby-Token: $api_key" -H "Content-Type: application/json" \
       -d "{\"PlaybackPositionTicks\":$final_position,\"Played\":$played_status}" \
-      "$server/Users/$user_id/Items/$item_id/UserData" >/dev/null 2>&1
+      "$server/Users/$user_id/Items/$1/UserData" >/dev/null 2>&1
   fi
 
-  local payload=$(
-    cat <<EOF
-{
-  "UserId": "$user_id",
-  "ItemId": "$item_id",
-  "PlaySessionId": "jelly-$item_id-$$",
-  "PositionTicks": $position_ticks,
-  "IsPaused": $is_paused,
-  "EventName": "timeupdate"
-}
-EOF
-  )
-
-  curl -s -X POST \
-    -H "X-Emby-Token: $api_key" \
-    -H "X-Emby-Client: Jelly" \
-    -H "X-Emby-Device-Name: $(uname -n)" \
-    -H "X-Emby-Device-Id: $(uname -n)-$$" \
-    -H "X-Emby-Client-Version: 1.0" \
-    -H "Content-Type: application/json" \
-    -d "$payload" \
+  curl -s -X POST -H "X-Emby-Token: $api_key" -H "X-Emby-Client: Jelly" \
+    -H "X-Emby-Device-Name: $(uname -n)" -H "X-Emby-Device-Id: $(uname -n)-$$" \
+    -H "X-Emby-Client-Version: 1.0" -H "Content-Type: application/json" \
+    -d "{\"UserId\":\"$user_id\",\"ItemId\":\"$1\",\"PlaySessionId\":\"jelly-$1-$$\",\"PositionTicks\":$position_ticks,\"IsPaused\":${3:-false},\"EventName\":\"timeupdate\"}" \
     "$server/Sessions/Playing/Progress" >/dev/null
 }
 
 stop_playback_session() {
-  local item_id=$1
-  local position_seconds=$2
   local user_id=$(fetch_user_id)
-  local position_ticks=$(awk -v seconds="$position_seconds" 'BEGIN { printf "%.0f", seconds * 10000000 }')
+  local position_ticks=$(awk -v seconds="$2" 'BEGIN { printf "%.0f", seconds * 10000000 }')
 
-  local payload=$(
-    cat <<EOF
-{
-  "UserId": "$user_id",
-  "ItemId": "$item_id",
-  "PlaySessionId": "jelly-$item_id-$$",
-  "PositionTicks": $position_ticks
-}
-EOF
-  )
-
-  curl -s -X POST \
-    -H "X-Emby-Token: $api_key" \
-    -H "X-Emby-Client: Jelly" \
-    -H "X-Emby-Device-Name: $(uname -n)" \
-    -H "X-Emby-Device-Id: $(uname -n)-$$" \
-    -H "X-Emby-Client-Version: 1.0" \
-    -H "Content-Type: application/json" \
-    -d "$payload" \
+  curl -s -X POST -H "X-Emby-Token: $api_key" -H "X-Emby-Client: Jelly" \
+    -H "X-Emby-Device-Name: $(uname -n)" -H "X-Emby-Device-Id: $(uname -n)-$$" \
+    -H "X-Emby-Client-Version: 1.0" -H "Content-Type: application/json" \
+    -d "{\"UserId\":\"$user_id\",\"ItemId\":\"$1\",\"PlaySessionId\":\"jelly-$1-$$\",\"PositionTicks\":$position_ticks}" \
     "$server/Sessions/Playing/Stopped" >/dev/null
 }
 
@@ -339,20 +373,14 @@ play_media() {
   local socket_path="/tmp/mpv-socket-$$"
 
   local server_position=$(get_playback_progress "$id")
-  if [ -n "$server_position" ] && [ "$server_position" -gt 0 ]; then
-    resume_position=$server_position
-  fi
-
+  [ -n "$server_position" ] && [ "$server_position" -gt 0 ] && resume_position=$server_position
   resume_position=$(echo "$resume_position" | tr -cd '0-9.' | awk '{printf "%.0f", $1}')
 
   if [ "$resume_position" -gt 0 ]; then
     choice=$(echo -e "$(date -u -d "@$resume_position" +"%H:%M:%S")\nStart from the beginning" | fzf --header="$name")
     case "$choice" in
     "Start from the beginning") resume_position=0 ;;
-    "")
-      return
-      ;;
-    *) ;;
+    "") return ;;
     esac
   fi
 
@@ -361,20 +389,12 @@ play_media() {
   if [ "$MEDIA_PLAYER" = "iina" ]; then
     open -a IINA "$playback_url" --args --start-time="$resume_position" --force-media-title="$name"
   else
-    mpv "$playback_url" \
-      --start="$resume_position" \
-      --force-media-title="$name" \
-      --force-seekable=yes \
-      --demuxer-lavf-o=fflags=+genpts \
-      --demuxer-lavf-probe-info=nostreams \
-      --demuxer-max-bytes=500MiB \
-      --cache=yes \
-      --cache-secs=60 \
-      --stream-lavf-o=reconnect_streamed=1 \
-      --stream-lavf-o=reconnect_delay_max=4 \
-      --input-ipc-server="$socket_path" \
-      --quiet \
-      --no-terminal &
+    mpv "$playback_url" --start="$resume_position" --force-media-title="$name" \
+      --force-seekable=yes --demuxer-lavf-o=fflags=+genpts \
+      --demuxer-lavf-probe-info=nostreams --demuxer-max-bytes=500MiB \
+      --cache=yes --cache-secs=60 --stream-lavf-o=reconnect_streamed=1 \
+      --stream-lavf-o=reconnect_delay_max=4 --input-ipc-server="$socket_path" \
+      --quiet --no-terminal &
     mpv_pid=$!
 
     (
@@ -382,18 +402,11 @@ play_media() {
       last_position=$resume_position
       while kill -0 $mpv_pid 2>/dev/null; do
         if [ -S "$socket_path" ]; then
-          position=$(echo '{ "command": ["get_property", "playback-time"] }' |
-            socat - "$socket_path" 2>/dev/null |
-            grep -o '"data":[0-9.]*' | sed 's/"data"://g')
-
-          if [[ "$position" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-            last_position=$position
-            report_progress "$id" "$position" "false"
-          fi
+          position=$(echo '{ "command": ["get_property", "playback-time"] }' | socat - "$socket_path" 2>/dev/null | grep -o '"data":[0-9.]*' | sed 's/"data"://g')
+          [[ "$position" =~ ^[0-9]+(\.[0-9]+)?$ ]] && last_position=$position && report_progress "$id" "$position" "false"
         fi
         sleep 2
       done
-
       stop_playback_session "$id" "$last_position"
     ) &
 
@@ -404,8 +417,7 @@ play_media() {
 
 edit_config_file() {
   if ! command -v "$EDITOR" &>/dev/null; then
-    echo -e "\033[31mError:\033[0m Editor '$EDITOR' is not installed."
-    echo "Please update your config with a valid editor."
+    echo -e "Editor \033[31m$EDITOR\033[0m is not installed.\nAdd a valid editor in your Config.\n"
     read -n 1 -s -r -p "Press any key to continue..."
     return
   fi
@@ -415,282 +427,246 @@ edit_config_file() {
   server=$(grep "^server=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   api_key=$(grep "^api_key=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   editor=$(grep "^editor=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  media_preview=$(grep "^media_preview=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   player=$(grep "^player=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
-  mark_continue=$(grep "^mark_continue=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
-  mark_watched=$(grep "^mark_watched=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  mark_continue=$(grep "^mark_continue_percentage=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)
+  mark_watched=$(grep "^mark_watched_percentage=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)
 
   eval "$(grep -A 100 "^FZF_DEFAULT_OPTS=" "$CONFIG_FILE" 2>/dev/null | sed -n "/^FZF_DEFAULT_OPTS=/,/'$/p")"
 
   MEDIA_PLAYER=${player:-$DEFAULT_MEDIA_PLAYER}
+  MEDIA_PREVIEW=${media_preview:-yes}
   EDITOR=${editor:-vim}
-
   MIN_PROGRESS_PERCENT=${mark_continue:-5}
   WATCHED_PERCENT=${mark_watched:-95}
-
   [ -z "$FZF_DEFAULT_OPTS" ] && FZF_DEFAULT_OPTS="$DEFAULT_FZF_OPTS"
 
   export FZF_DEFAULT_OPTS
-
   echo -e "\033[32mCONFIG RELOADED\033[0m"
   sleep 1
 }
 
 main() {
   while true; do
-    local main_menu_option media_id media_name resume_position selected_option
-
-    main_menu_option=$(echo -e "🍿 Continue Watching\n📺 Next Up\n🔍 Media\n📂 Libraries\n⚙️ Settings" | fzf)
-    if [ $? -ne 0 ]; then
-      exit 0
-    fi
+    main_menu_option=$(echo -e "🍿 Continue Watching\n📺 Next Up\n🔍 Search\n📂 Libraries\n⚙️ Settings" | fzf)
+    [ $? -ne 0 ] && exit 0
 
     case "$main_menu_option" in
-    "🍿 Continue Watching")
-      continue_watching_data=$(fetch_continue_watching)
+    "🍿 Continue Watching" | "📺 Next Up")
+      local fetch_func=$([ "$main_menu_option" = "🍿 Continue Watching" ] && echo "fetch_continue_watching" || echo "fetch_next_up")
+      local header=$([ "$main_menu_option" = "🍿 Continue Watching" ] && echo "Continue Watching" || echo "Next Up")
+      local data=$($fetch_func)
 
-      watch_list=$(echo "$continue_watching_data" | awk -F'|' '{
-        if ($2 == "Episode") print "📺 " $3;
-        else if ($2 == "Movie") print "🎬 " $3;
-      }')
+      data_file=$(mktemp)
+      trap 'rm -f "$data_file"' RETURN
+      echo "$data" >"$data_file"
 
-      selected_option=$(echo "$watch_list" | fzf --header="Continue Watching")
-      if [ $? -ne 0 ]; then
-        continue
+      watch_list=$(echo "$data" | awk -F'|' '{if ($2 == "Episode") print "📺 " $3; else if ($2 == "Movie") print "🎬 " $3}')
+      if [ "$MEDIA_PREVIEW" = "yes" ]; then
+        selected_option=$(echo "$watch_list" | fzf --header="$header" \
+          --preview "$PREVIEW_SCRIPT '$data_file' {} '$server' '$api_key' '$CACHE_DIR' '$HAS_CHAFA'" \
+          --preview-window=right:40%)
+      else
+        selected_option=$(echo "$watch_list" | fzf --header="$header")
       fi
+
+      [ $? -ne 0 ] && continue
 
       title_only=$(echo "$selected_option" | sed 's/^[📺🎬] //')
-      media_id=$(echo "$continue_watching_data" | grep -F "|$title_only|" | awk -F'|' '{print $1}')
-      media_type=$(echo "$continue_watching_data" | grep -F "|$title_only|" | awk -F'|' '{print $2}')
-      display_name=$(echo "$continue_watching_data" | grep -F "|$title_only|" | awk -F'|' '{print $3}')
-      resume_position=$(echo "$continue_watching_data" | grep -F "|$title_only|" | awk -F'|' '{print $4}')
+      media_id=$(echo "$data" | grep -F "|$title_only|" | awk -F'|' '{print $1}')
+      media_type=$(echo "$data" | grep -F "|$title_only|" | awk -F'|' '{print $2}')
+      display_name=$(echo "$data" | grep -F "|$title_only|" | awk -F'|' '{print $3}')
+      resume_position=$(echo "$data" | grep -F "|$title_only|" | awk -F'|' '{print $4}')
 
-      if [ "$media_type" = "Episode" ]; then
-        media_name=$(echo "$display_name" | sed 's/^.* - //')
-      else
-        media_name="$display_name"
-      fi
-
+      [ "$media_type" = "Episode" ] && media_name=$(echo "$display_name" | sed 's/^.* - //') || media_name="$display_name"
       play_media "$media_id" "$media_name" "$resume_position"
       ;;
-    "📺 Next Up")
-      next_up_data=$(fetch_next_up)
 
-      next_up_list=$(echo "$next_up_data" | awk -F'|' '{
-        if ($2 == "Episode") print "📺 " $3;
-        else if ($2 == "Movie") print "🎬 " $3;
-      }')
-
-      selected_option=$(echo "$next_up_list" | fzf --header="Next Up")
-      if [ $? -ne 0 ]; then
-        continue
-      fi
-
-      title_only=$(echo "$selected_option" | sed 's/^[📺🎬] //')
-      media_id=$(echo "$next_up_data" | grep -F "|$title_only|" | awk -F'|' '{print $1}')
-      media_type=$(echo "$next_up_data" | grep -F "|$title_only|" | awk -F'|' '{print $2}')
-      display_name=$(echo "$next_up_data" | grep -F "|$title_only|" | awk -F'|' '{print $3}')
-      resume_position=$(echo "$next_up_data" | grep -F "|$title_only|" | awk -F'|' '{print $4}')
-
-      if [ "$media_type" = "Episode" ]; then
-        media_name=$(echo "$display_name" | sed 's/^.* - //')
-      else
-        media_name="$display_name"
-      fi
-
-      play_media "$media_id" "$media_name" "$resume_position"
-      ;;
     "📂 Libraries")
-      local current_view="libraries"
-      local selected_library_id=""
-      local selected_library_name=""
-      local selected_media_id=""
-      local selected_media_name=""
-      local season_id=""
-      local season_info=""
-      local season_count=0
-
       while true; do
-        case "$current_view" in
-        "libraries")
-          libraries_list=$(fetch_libraries | awk -F'|' '{print "📂 " $2}')
-          library_selected=$(echo "$libraries_list" | fzf --header="Libraries")
+        libraries_list=$(get_libraries_cached | awk -F'|' '{print "📂 " $2}')
+        library_selected=$(echo "$libraries_list" | fzf --header="Libraries")
+        [ $? -ne 0 ] && break
 
-          if [ $? -ne 0 ]; then
-            break
+        selected_library_name=$(echo "$library_selected" | sed 's/📂 //')
+        selected_library_id=$(get_libraries_cached | grep "|$selected_library_name$" | awk -F'|' '{print $1}')
+
+        while true; do
+          media_data=$(fetch_media "$selected_library_id")
+          data_file=$(mktemp)
+          trap 'rm -f "$data_file"' RETURN
+          echo "$media_data" >"$data_file"
+
+          media_list=$(echo "$media_data" | awk -F'|' '{if ($2 == "Movie") print "🎬 " $3; else if ($2 == "Series") print "📺 " $3}')
+          if [ "$MEDIA_PREVIEW" = "yes" ]; then
+            selected=$(echo "$media_list" | fzf --header="$selected_library_name" \
+              --preview "$PREVIEW_SCRIPT '$data_file' {} '$server' '$api_key' '$CACHE_DIR' '$HAS_CHAFA'" \
+              --preview-window=right:40%)
+          else
+            selected=$(echo "$media_list" | fzf --header="$selected_library_name")
           fi
 
-          selected_library_name=$(echo "$library_selected" | sed 's/📂 //')
-          selected_library_id=$(fetch_libraries | grep "|$selected_library_name$" | awk -F'|' '{print $1}')
-          current_view="media"
-          ;;
-
-        "media")
-          media_list=$(fetch_media "$selected_library_id" | awk -F'|' '{
-                if ($2 == "Movie") print "🎬 " $3;
-                else if ($2 == "Series") print "📺 " $3;
-              }')
-
-          selected=$(echo "$media_list" | fzf --header="$selected_library_name")
-          if [ $? -ne 0 ]; then
-            current_view="libraries"
-            continue
-          fi
+          fzf_exit=$?
+          [ $fzf_exit -ne 0 ] && break
 
           title_only=$(echo "$selected" | sed 's/^[🎬📺] //')
-          item_data=$(fetch_media "$selected_library_id" | grep "|$title_only$")
+          item_data=$(echo "$media_data" | grep "|$title_only$")
           media_id=$(echo "$item_data" | awk -F'|' '{print $1}')
           media_type=$(echo "$item_data" | awk -F'|' '{print $2}')
           media_name=$(echo "$item_data" | awk -F'|' '{print $3}')
 
-          selected_media_id="$media_id"
-          selected_media_name="$media_name"
-
-          resume_position=$(get_playback_progress "$media_id")
-
           if [ "$media_type" = "Series" ]; then
-            current_view="seasons"
-          else
-            play_media "$media_id" "$media_name" "$resume_position"
-            continue
-          fi
-          ;;
+            seasons_data=$(fetch_seasons "$media_id")
+            season_count=$(echo "$seasons_data" | grep -v "^$" | wc -l)
 
-        "seasons")
-          seasons_data=$(fetch_seasons "$selected_media_id")
+            while true; do
+              if [ "$season_count" -eq 1 ]; then
+                season_id=$(echo "$seasons_data" | awk -F'|' '{print $1}')
+                season_info=$(echo "$seasons_data" | awk -F'|' '{if ($3 == "null") printf "Special: %s", $2; else printf "Season %s", $3}')
+              else
+                data_file=$(mktemp)
+                trap 'rm -f "$data_file"' RETURN
+                echo "$seasons_data" >"$data_file"
+
+                seasons_list=$(echo "$seasons_data" | awk -F'|' '{if ($3 == "null") printf "📂 Special: %s\n", $2; else printf "📂 Season %s\n", $3}')
+                if [ "$MEDIA_PREVIEW" = "yes" ]; then
+                  selected_season=$(echo "$seasons_list" | fzf --header="$media_name" \
+                    --preview "$PREVIEW_SCRIPT '$data_file' {} '$server' '$api_key' '$CACHE_DIR' '$HAS_CHAFA'" \
+                    --preview-window=right:40%)
+                else
+                  selected_season=$(echo "$seasons_list" | fzf --header="$media_name")
+                fi
+
+                fzf_exit=$?
+                [ $fzf_exit -ne 0 ] && break
+
+                season_number=$(echo "$selected_season" | sed -E 's/📂 Season ([0-9]+)/\1/')
+
+                if [[ "$selected_season" == "📂 Special"* ]]; then
+                  season_id=$(echo "$seasons_data" | grep "|Special|" | awk -F'|' '{print $1}')
+                  season_info="Special"
+                else
+                  season_id=$(echo "$seasons_data" | grep "|Season $season_number|" | awk -F'|' '{print $1}')
+                  season_info="Season $season_number"
+                fi
+              fi
+
+              while true; do
+                episodes_data=$(fetch_episodes "$media_id" "$season_id")
+                data_file=$(mktemp)
+                trap 'rm -f "$data_file"' RETURN
+                echo "$episodes_data" >"$data_file"
+
+                episodes_list=$(echo "$episodes_data" | awk -F'|' '{printf "E%02d: %s\n", $3, $2}')
+                if [ "$MEDIA_PREVIEW" = "yes" ]; then
+                  selected_episode=$(echo "$episodes_list" | fzf --header="$season_info" \
+                    --preview "$PREVIEW_SCRIPT '$data_file' {} '$server' '$api_key' '$CACHE_DIR' '$HAS_CHAFA'" \
+                    --preview-window=right:40%)
+                else
+                  selected_episode=$(echo "$episodes_list" | fzf --header="$season_info")
+                fi
+
+                fzf_exit=$?
+                [ $fzf_exit -ne 0 ] && { [ "$season_count" -eq 1 ] && break 2 || break; }
+
+                episode_name=$(echo "$selected_episode" | sed -E 's/^E[0-9]+: (.*)/\1/')
+                episode_data=$(echo "$episodes_data" | grep "|$episode_name|")
+                episode_id=$(echo "$episode_data" | awk -F'|' '{print $1}')
+                episode_display_name=$(echo "$episode_data" | awk -F'|' '{print $2}')
+
+                play_media "$episode_id" "$episode_display_name" "$(get_playback_progress "$episode_id")"
+              done
+
+              [ "$season_count" -eq 1 ] && break
+            done
+          else
+            play_media "$media_id" "$media_name" "$(get_playback_progress "$media_id")"
+          fi
+        done
+      done
+      ;;
+
+    "🔍 Search")
+      tmp_file=$(mktemp)
+      trap 'rm -f "$tmp_file"' RETURN
+
+      while IFS="|" read -r library_id library_name; do
+        fetch_media "$library_id" | awk -F'|' -v lib="$library_name" '{
+            if ($2 == "Movie") icon = "🎬";
+            else if ($2 == "Series") icon = "📺";
+            else icon = "🎬";
+            printf "%s|%s|%s|%s %s [\033[38;2;238;212;159m%s\033[0m]\n", $1, $2, $3, icon, $3, lib;
+          }' >>"$tmp_file"
+      done < <(get_libraries_cached)
+
+      search_loop=true
+      while [ "$search_loop" = true ]; do
+        if [ "$MEDIA_PREVIEW" = "yes" ]; then
+          selected=$(cut -d '|' -f 4 "$tmp_file" | fzf --header="Search" --ansi \
+            --preview "$PREVIEW_SCRIPT '$tmp_file' {} '$server' '$api_key' '$CACHE_DIR' '$HAS_CHAFA'" \
+            --preview-window=right:40%)
+        else
+          selected=$(cut -d '|' -f 4 "$tmp_file" | fzf --header="Search" --ansi)
+        fi
+
+        [ $? -ne 0 ] && search_loop=false && continue
+
+        title_match=$(echo "$selected" | sed 's/^[🎬📺] //' | sed 's/ \[[^]]*\]$//')
+        selected_data=$(grep "|$title_match|" "$tmp_file" | head -1)
+        media_id=$(echo "$selected_data" | cut -d '|' -f 1)
+        media_type=$(echo "$selected_data" | cut -d '|' -f 2)
+        media_name=$(echo "$selected_data" | cut -d '|' -f 3)
+
+        if [ "$media_type" = "Series" ]; then
+          seasons_data=$(fetch_seasons "$media_id")
           season_count=$(echo "$seasons_data" | grep -v "^$" | wc -l)
 
           if [ "$season_count" -eq 1 ]; then
             season_id=$(echo "$seasons_data" | awk -F'|' '{print $1}')
-            season_info=$(echo "$seasons_data" | awk -F'|' '{
-                if ($3 == "null") {
-                  printf "📂 Special: %s", $2;
-                } else {
-                  printf "📂 Season %s", $3;
-                }
-              }')
-            current_view="episodes"
-          else
-            seasons_list=$(echo "$seasons_data" | awk -F'|' '{
-                if ($3 == "null") {
-                  printf "📂 Special: %s\n", $2;
-                } else {
-                  printf "📂 Season %s\n", $3;
-                }
-              }')
+            season_info=$(echo "$seasons_data" | awk -F'|' '{if ($3 == "null") printf "Special: %s", $2; else printf "Season %s", $3}')
 
-            selected_season=$(echo "$seasons_list" | fzf --header="$selected_media_name")
-            if [ $? -ne 0 ]; then
-              current_view="media"
-              continue
-            fi
+            while true; do
+              episodes_data=$(fetch_episodes "$media_id" "$season_id")
+              data_file=$(mktemp)
+              trap 'rm -f "$data_file"' RETURN
+              echo "$episodes_data" >"$data_file"
 
-            season_number=$(echo "$selected_season" | sed -E 's/📂 Season ([0-9]+)/\1/')
-
-            if [[ "$selected_season" == "📂 Special"* ]]; then
-              season_id=$(echo "$seasons_data" | grep "|Special|" | awk -F'|' '{print $1}')
-              season_info="Special"
-            else
-              season_id=$(echo "$seasons_data" | grep "|Season $season_number|" | awk -F'|' '{print $1}')
-              season_info="Season $season_number"
-            fi
-
-            current_view="episodes"
-          fi
-          ;;
-
-        "episodes")
-          episodes_list=$(fetch_episodes "$selected_media_id" "$season_id" | awk -F'|' '{
-                printf "E%02d: %s\n", $3, $2;
-            }')
-
-          selected_episode=$(echo "$episodes_list" | fzf --header="$season_info")
-          if [ $? -ne 0 ]; then
-            if [ "$season_count" -eq 1 ]; then
-              current_view="media"
-            else
-              current_view="seasons"
-            fi
-            continue
-          fi
-
-          episode_name=$(echo "$selected_episode" | sed -E 's/^E[0-9]+: (.*)/\1/')
-          episode_data=$(fetch_episodes "$selected_media_id" "$season_id" | grep "|$episode_name|")
-          episode_id=$(echo "$episode_data" | awk -F'|' '{print $1}')
-          episode_display_name=$(echo "$episode_data" | awk -F'|' '{print $2}')
-
-          episode_resume=$(get_playback_progress "$episode_id")
-
-          play_media "$episode_id" "$episode_display_name" "$episode_resume"
-          continue
-          ;;
-        esac
-      done
-      ;;
-
-    "🔍 Media")
-      all_libraries=$(fetch_libraries)
-
-      tmp_file=$(mktemp)
-
-      echo "$all_libraries" | while IFS="|" read -r library_id library_name; do
-        fetch_media "$library_id" | awk -F'|' -v lib="$library_name" '{
-          printf "%s|%s|%s|🎬 %s {\033[38;2;238;212;159m%s\033[0m}\n", $1, $2, $3, $3, lib;
-        }' >>"$tmp_file"
-      done
-
-      selected=$(cut -d '|' -f 4 "$tmp_file" | fzf --header="Media" --ansi)
-      if [ $? -ne 0 ]; then
-        rm "$tmp_file"
-        continue
-      fi
-
-      title_match=$(echo "$selected" | sed 's/^🎬 //' | sed 's/ {[^}]*}$//')
-      selected_data=$(grep "|$title_match|" "$tmp_file" | head -1)
-      media_id=$(echo "$selected_data" | cut -d '|' -f 1)
-      media_type=$(echo "$selected_data" | cut -d '|' -f 2)
-      media_name=$(echo "$selected_data" | cut -d '|' -f 3)
-
-      rm "$tmp_file"
-
-      resume_position=$(get_playback_progress "$media_id")
-
-      if [ "$media_type" = "Series" ]; then
-        local current_view="seasons"
-        local selected_media_id="$media_id"
-        local selected_media_name="$media_name"
-        local season_id=""
-        local season_info=""
-        local season_count=0
-
-        while true; do
-          case "$current_view" in
-          "seasons")
-            seasons_data=$(fetch_seasons "$selected_media_id")
-            season_count=$(echo "$seasons_data" | grep -v "^$" | wc -l)
-
-            if [ "$season_count" -eq 1 ]; then
-              season_id=$(echo "$seasons_data" | awk -F'|' '{print $1}')
-              season_info=$(echo "$seasons_data" | awk -F'|' '{
-                  if ($3 == "null") {
-                    printf "📂 Special: %s", $2;
-                  } else {
-                    printf "📂 Season %s", $3;
-                  }
-                }')
-              current_view="episodes"
-            else
-              seasons_list=$(echo "$seasons_data" | awk -F'|' '{
-                  if ($3 == "null") {
-                    printf "📂 Special: %s\n", $2;
-                  } else {
-                    printf "📂 Season %s\n", $3;
-                  }
-                }')
-
-              selected_season=$(echo "$seasons_list" | fzf --header="$selected_media_name")
-              if [ $? -ne 0 ]; then
-                break
+              episodes_list=$(echo "$episodes_data" | awk -F'|' '{printf "E%02d: %s\n", $3, $2}')
+              if [ "$MEDIA_PREVIEW" = "yes" ]; then
+                selected_episode=$(echo "$episodes_list" | fzf --header="$season_info" \
+                  --preview "$PREVIEW_SCRIPT '$data_file' {} '$server' '$api_key' '$CACHE_DIR' '$HAS_CHAFA'" \
+                  --preview-window=right:40%)
+              else
+                selected_episode=$(echo "$episodes_list" | fzf --header="$season_info")
               fi
+
+              fzf_exit=$?
+              [ $fzf_exit -ne 0 ] && break
+
+              episode_name=$(echo "$selected_episode" | sed -E 's/^E[0-9]+: (.*)/\1/')
+              episode_data=$(echo "$episodes_data" | grep "|$episode_name|")
+              episode_id=$(echo "$episode_data" | awk -F'|' '{print $1}')
+              episode_display_name=$(echo "$episode_data" | awk -F'|' '{print $2}')
+
+              play_media "$episode_id" "$episode_display_name" "$(get_playback_progress "$episode_id")"
+            done
+          else
+            while true; do
+              data_file=$(mktemp)
+              trap 'rm -f "$data_file"' RETURN
+              echo "$seasons_data" >"$data_file"
+
+              seasons_list=$(echo "$seasons_data" | awk -F'|' '{if ($3 == "null") printf "📂 Special: %s\n", $2; else printf "📂 Season %s\n", $3}')
+              if [ "$MEDIA_PREVIEW" = "yes" ]; then
+                selected_season=$(echo "$seasons_list" | fzf --header="$media_name" \
+                  --preview "$PREVIEW_SCRIPT '$data_file' {} '$server' '$api_key' '$CACHE_DIR' '$HAS_CHAFA'" \
+                  --preview-window=right:40%)
+              else
+                selected_season=$(echo "$seasons_list" | fzf --header="$media_name")
+              fi
+
+              fzf_exit=$?
+              [ $fzf_exit -ne 0 ] && break
 
               season_number=$(echo "$selected_season" | sed -E 's/📂 Season ([0-9]+)/\1/')
 
@@ -702,49 +678,46 @@ main() {
                 season_info="Season $season_number"
               fi
 
-              current_view="episodes"
-            fi
-            ;;
+              while true; do
+                episodes_data=$(fetch_episodes "$media_id" "$season_id")
+                data_file=$(mktemp)
+                trap 'rm -f "$data_file"' RETURN
+                echo "$episodes_data" >"$data_file"
 
-          "episodes")
-            episodes_list=$(fetch_episodes "$selected_media_id" "$season_id" | awk -F'|' '{
-                  printf "E%02d: %s\n", $3, $2;
-              }')
+                episodes_list=$(echo "$episodes_data" | awk -F'|' '{printf "E%02d: %s\n", $3, $2}')
+                if [ "$MEDIA_PREVIEW" = "yes" ]; then
+                  selected_episode=$(echo "$episodes_list" | fzf --header="$season_info" \
+                    --preview "$PREVIEW_SCRIPT '$data_file' {} '$server' '$api_key' '$CACHE_DIR' '$HAS_CHAFA'" \
+                    --preview-window=right:40%)
+                else
+                  selected_episode=$(echo "$episodes_list" | fzf --header="$season_info")
+                fi
 
-            selected_episode=$(echo "$episodes_list" | fzf --header="$season_info")
-            if [ $? -ne 0 ]; then
-              if [ "$season_count" -eq 1 ]; then
-                break
-              else
-                current_view="seasons"
-                continue
-              fi
-            fi
+                fzf_exit=$?
+                [ $fzf_exit -ne 0 ] && break
 
-            episode_name=$(echo "$selected_episode" | sed -E 's/^E[0-9]+: (.*)/\1/')
-            episode_data=$(fetch_episodes "$selected_media_id" "$season_id" | grep "|$episode_name|")
-            episode_id=$(echo "$episode_data" | awk -F'|' '{print $1}')
-            episode_display_name=$(echo "$episode_data" | awk -F'|' '{print $2}')
+                episode_name=$(echo "$selected_episode" | sed -E 's/^E[0-9]+: (.*)/\1/')
+                episode_data=$(echo "$episodes_data" | grep "|$episode_name|")
+                episode_id=$(echo "$episode_data" | awk -F'|' '{print $1}')
+                episode_display_name=$(echo "$episode_data" | awk -F'|' '{print $2}')
 
-            episode_resume=$(get_playback_progress "$episode_id")
-
-            play_media "$episode_id" "$episode_display_name" "$episode_resume"
-            continue
-            ;;
-          esac
-        done
-      else
-        play_media "$media_id" "$media_name" "$resume_position"
-      fi
+                play_media "$episode_id" "$episode_display_name" "$(get_playback_progress "$episode_id")"
+              done
+            done
+          fi
+        else
+          play_media "$media_id" "$media_name" "$(get_playback_progress "$media_id")"
+        fi
+      done
       ;;
 
     "⚙️ Settings")
       edit_config_file
+      LIBRARIES_CACHE=""
       ;;
     esac
   done
 }
 
-trap "echo -e '\nExiting...'; exit 0" SIGINT SIGTERM
-
+trap 'echo -e "\nExiting..."; exit 0' SIGINT SIGTERM
 main
