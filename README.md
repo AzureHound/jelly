@@ -91,16 +91,21 @@ Open a new terminal and run:
 jelly
 ```
 
-On first run, Jelly creates a ⚙️ config file at `~/.config/jelly/config`. Edit it with your Jellyfin details:
+On first run, Jelly generates a **config** file at `~/.config/jelly/config`.
+Edit it with your Jellyfin Server URL & API Key.
 
----
-
-### 🛠️ Get Your Jellyfin API Key
+### 🛠️ Jellyfin API Key
 
 1. Log in to your Jellyfin server as an Admin.
 2. Go to **Dashboard** > **API Keys**.
-3. Click **+**, add a description (e.g., "CLI Tool"), and **Generate**.
+3. Click **+**, add a description (e.g., "Jelly"), and **Generate**.
 4. Copy the API key and paste it into your config file in `api_key`.
+
+### 📖 Documentation
+
+- **[Configuration](../../wiki/Configuration)** – Setup config file, API key, & options
+- **[Usage Guide](../../wiki/Usage)** – Main menu, navigation, and playback features
+- **[Troubleshooting](../../wiki/Troubleshooting)** – Common issues and solutions
 
 ## Disclaimer
 
