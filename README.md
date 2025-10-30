@@ -1,8 +1,6 @@
-# 🎬 Jelly
+**<p align="center">A simple command-line tool to explore & stream your Jellyfin media right from terminal. 🚀</p>**
 
 <https://github.com/user-attachments/assets/f0b47cb3-6e19-4cd1-929a-c38f8a9fb5cf>
-
-**<p align="center">A simple command-line tool to explore & stream your Jellyfin media right from terminal. 🚀</p>**
 
 ### 🌟 Features
 
@@ -92,14 +90,14 @@ jelly
 On first run, Jelly generates a **config** file at `~/.config/jelly/config`.
 Edit it with your Jellyfin Server URL & API Key.
 
-### 🛠️ Jellyfin API Key
+### 🛠️ API Key
 
 1. Log in to your Jellyfin server as an Admin.
 2. Go to **Dashboard** > **API Keys**.
 3. Click **+**, add a description (e.g., "Jelly"), and **Generate**.
 4. Copy the API key and paste it into your config file in `api_key`.
 
-### 📖 Documentation
+### 📖 Wiki
 
 - **[Configuration](../../wiki/Configuration)** – Setup config file, API key, & options
 - **[Usage Guide](../../wiki/Usage)** – Main menu, navigation, and playback features
