@@ -1,122 +1,115 @@
-# 🎬 Jellyfin CLI Tool 🍿
+# 🎬 Jelly
 
 ### Showcase
 
 <https://github.com/user-attachments/assets/f0b47cb3-6e19-4cd1-929a-c38f8a9fb5cf>
 
-A lightweight command-line tool to explore and stream your Jellyfin media directly in the terminal. 🚀
+A simple command-line tool to explore & stream your Jellyfin media right from terminal. 🚀
+
+### 🌟 Features
+
+- **Browse & Search**: Interactively explore Jellyfin libraries or search across all content instantly
+- **Continue Watching**: Resume playback from exactly where you left off
+- **Next Up Queue**: See next episodes ready to stream
+- **Media Previews**: View cover images + metadata (title, year, runtime, overview) while browsing
+- **Multi-Format Support**: Stream movies & TV shows with season/episode navigation
+- **Smart Progress Tracking**: Auto-mark watched (configurable %) & save resume positions
+- **Dual Player Support**: mpv (Linux) or IINA (macOS)
+- **fzf Integration**: Smooth keyboard-driven terminal navigation with custom colors
+- **Customizable Config**: Editor, player, preview settings, progress thresholds, FZF styling
+- **Cross-Platform**: Works on Arch Linux, Debian/Ubuntu, Fedora, macOS
+
+### 📋 Requirements
+
+- **Jellyfin Server**: v10.8+
+- **Terminals**: Any terminal supporting ANSI colors (image previews best on kitty, xterm-kitty, or sixel-compatible terminals)
+- **Dependencies**: `chafa`, `curl`, `fzf`, `jq`, `mpv` (or `iina` on macOS), `socat`
 
 ---
 
-## 🌟 Features
+### 📦 Installation
 
-- Browse your Jellyfin libraries interactively.
-- Search and play movies or shows instantly.
-- Smooth terminal navigation with `fzf`.
-
----
-
-## 📦 Installation
-
-### Install via AUR (Arch Linux)
+#### Arch Linux
 
 Using `yay`:
 
-```bash
+```sh
 yay -S jelly
 ```
 
 Using `paru`:
 
-```bash
+```sh
 paru -S jelly
 ```
 
-### Build from Source
+#### Build from Source
 
 1. Clone the repository & build the package:
 
-   ```bash
+   ```sh
    git clone https://github.com/AzureHound/jelly.git
    cd jelly
    makepkg -si
-   ../ && rm -rf jelly
+   cd .. && rm -rf jelly
    ```
 
-2. Install `curl jq fzf mpv` [dependencies]:
+2. Install `chafa curl fzf jq mpv socat` [dependencies]:
 
 For Arch Linux:
 
-```bash
-sudo pacman -S curl jq fzf mpv
+```sh
+sudo pacman -S chafa curl fzf jq mpv socat
 ```
 
 For Debian/Ubuntu:
 
-```bash
-sudo apt install curl jq fzf mpv
+```sh
+sudo apt install chafa curl fzf jq mpv socat
 ```
 
 For Fedora:
 
-```bash
-sudo dnf install curl jq fzf mpv
+```sh
+sudo dnf install chafa curl fzf jq mpv socat
 ```
 
 For macOS:
 
-```bash
-brew install curl jq fzf
+```sh
+brew install chafa curl fzf jq mpv socat
 brew install --cask iina  # Recommended media player for macOS
 ```
 
 ---
 
-## 🔧 Setup
-
-Create a config file at `~/.config/jelly/config`:
-
-```ini
-server=http://your-jellyfin-server:8096
-api_key=your-api-key
-player=mpv  # Use 'mpv' for Linux
-```
-
-For macOS, replace `player=mpv` with:
-
-```ini
-player=iina  # Use 'iina' for macOS
-```
-
-Replace `your-jellyfin-server` and `your-api-key` with your Jellyfin server details.
-
-### 🛠️ Get Your Jellyfin API Key
-
-1. Log in to your Jellyfin server as an admin.
-2. Go to **Dashboard** > **API Keys**.
-3. Click **+**, add a description (e.g., "CLI Tool"), and **Generate**.
-4. Copy the API key and paste it into your config file under `api_key`.
-
----
-
-## 🚀 Usage
+### 🚀 Usage
 
 Open a new terminal and run:
 
-```bash
+```sh
 jelly
 ```
 
-Enjoy browsing and streaming your media right from the terminal!
+On first run, Jelly creates a ⚙️ config file at `~/.config/jelly/config`. Edit it with your Jellyfin details:
 
 ---
 
-🎉 **Happy Streaming!**
+### 🛠️ Get Your Jellyfin API Key
+
+1. Log in to your Jellyfin server as an Admin.
+2. Go to **Dashboard** > **API Keys**.
+3. Click **+**, add a description (e.g., "CLI Tool"), and **Generate**.
+4. Copy the API key and paste it into your config file in `api_key`.
 
 ## Disclaimer
 
 > [!IMPORTANT]
 >
-> This project currently fetches all it's content from user hosted Jellyfin Server.
+> This project currently fetches all its content from user hosted Jellyfin Server.
 > The developer(s) of this application does not have any affiliation with the content providers available, and this application hosts zero content.
 > [DISCLAIMER](https://github.com/AzureHound/jelly/blob/main/DISCLAIMER.md)
+
+---
+
+🎉 **Happy Streaming!**
