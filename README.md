@@ -2,7 +2,7 @@
 
 ### Showcase
 
-<https://github.com/user-attachments/assets/1f43a895-11aa-4796-abd4-ec222c1ee7cb>
+<https://github.com/user-attachments/assets/f0b47cb3-6e19-4cd1-929a-c38f8a9fb5cf>
 
 A lightweight command-line tool to explore and stream your Jellyfin media directly in the terminal. 🚀
 
