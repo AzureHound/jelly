@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 
+JELLY_VERSION="3.4.2"
+
+case "${1}" in
+-v | --version)
+  echo "Jelly v$JELLY_VERSION"
+  exit 0
+  ;;
+esac
+
 CONFIG_FILE="$HOME/.config/jelly/config"
 CACHE_DIR="$HOME/.cache/jelly/Covers"
 PREVIEW_SCRIPT="$HOME/.local/share/jelly/jelly-preview"
