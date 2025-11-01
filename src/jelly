@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-JELLY_VERSION="3.4.2"
+VERSION="3.4.2"
 
 case "${1}" in
 -v | --version)
-  echo "Jelly v$JELLY_VERSION"
+  echo "Jelly v$VERSION"
   exit 0
   ;;
 esac
