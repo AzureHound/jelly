@@ -214,27 +214,27 @@ if [ "$item_type" = "Season" ]; then
       year=$(echo "$first_episode" | jq -r '.Items[0] | (.PremiereDate // .ProductionYear // empty) | tostring | split("-")[0]' 2>/dev/null)
     fi
   fi
-  echo "Title: $name"
-  echo "Type: $(echo "$item_data" | jq -r '.Type // "Unknown"')"
-  [ -n "$year" ] && [ "$year" != "null" ] && [ "$year" != "" ] && echo "Year: $year"
+  echo -e "\033[38;2;237;135;150mTitle\033[0m: \033[38;2;183;189;248m$name\033[0m"
+  echo -e "\033[38;2;237;135;150mType\033[0m: \033[38;2;183;189;248m$(echo "$item_data" | jq -r '.Type // "Unknown"')\033[0m"
+  [ -n "$year" ] && [ "$year" != "null" ] && [ "$year" != "" ] && echo -e "\033[38;2;237;135;150mYear\033[0m: \033[38;2;183;189;248m$year\033[0m"
 elif [ "$item_type" = "Series" ]; then
   overview=$(echo "$item_data" | jq -r '.Overview // "No description available"' 2>/dev/null)
-  echo "Title: $name"
-  echo "Type: Shows"
-  [ -n "$year" ] && [ "$year" != "null" ] && [ "$year" != "" ] && echo "Year: $year"
+  echo -e "\033[38;2;237;135;150mTitle\033[0m: \033[38;2;183;189;248m$name\033[0m"
+  echo -e "\033[38;2;237;135;150mType\033[0m: \033[38;2;183;189;248mShows\033[0m"
+  [ -n "$year" ] && [ "$year" != "null" ] && [ "$year" != "" ] && echo -e "\033[38;2;237;135;150mYear\033[0m: \033[38;2;183;189;248m$year\033[0m"
   echo ""
-  echo "Overview:"
-  echo "$overview" | fold -s -w "$preview_width"
+  echo -e "\033[38;2;237;135;150mOverview\033[0m:"
+  echo -e "\033[38;2;183;189;248m$(echo "$overview" | fold -s -w "$preview_width")\033[0m"
 else
   runtime=$(echo "$item_data" | jq -r 'if .RunTimeTicks then ((.RunTimeTicks / 10000000 / 60) | floor | tostring) + " min" else "Unknown" end' 2>/dev/null)
   overview=$(echo "$item_data" | jq -r '.Overview // "No description available"' 2>/dev/null)
-  echo "Title: $name"
-  echo "Type: $(echo "$item_data" | jq -r '.Type // "Unknown"')"
-  [ -n "$year" ] && [ "$year" != "null" ] && [ "$year" != "" ] && echo "Year: $year"
-  echo "Runtime: $runtime"
+  echo -e "\033[38;2;237;135;150mTitle\033[0m: \033[38;2;183;189;248m$name\033[0m"
+  echo -e "\033[38;2;237;135;150mType\033[0m: \033[38;2;183;189;248m$(echo "$item_data" | jq -r '.Type // "Unknown"')\033[0m"
+  [ -n "$year" ] && [ "$year" != "null" ] && [ "$year" != "" ] && echo -e "\033[38;2;237;135;150mYear\033[0m: \033[38;2;183;189;248m$year\033[0m"
+  echo -e "\033[38;2;237;135;150mRuntime\033[0m: \033[38;2;183;189;248m$runtime\033[0m"
   echo ""
-  echo "Overview:"
-  echo "$overview" | fold -s -w "$preview_width"
+  echo -e "\033[38;2;237;135;150mOverview\033[0m:"
+  echo -e "\033[38;2;183;189;248m$(echo "$overview" | fold -s -w "$preview_width")\033[0m"
 fi
 PREVIEW_EOF
   )
