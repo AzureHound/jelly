@@ -1,19 +1,5 @@
 #!/usr/bin/env bash
 
-VERSION="3.4.2"
-
-case "${1}" in
--v | --version)
-  echo "Jelly v$VERSION"
-  exit 0
-  ;;
-esac
-
-CONFIG_FILE="$HOME/.config/jelly/config"
-CACHE_DIR="$HOME/.cache/jelly/Covers"
-PREVIEW_SCRIPT="$HOME/.local/share/jelly/jelly-preview"
-PREVIEW_CHECKSUM="$HOME/.local/share/jelly/.chksm"
-
 DEFAULT_EDITOR="${EDITOR:-vim}"
 DEFAULT_MEDIA_PLAYER=$([[ "$OSTYPE" == "darwin"* ]] && echo "iina" || echo "mpv")
 
@@ -25,6 +11,20 @@ DEFAULT_FZF_OPTS='
     --prompt="󰥨 Search: " --pointer="❯" --separator="─" --scrollbar="│"
     --height=100% --padding=1
 '
+
+CONFIG_FILE="$HOME/.config/jelly/config"
+CACHE_DIR="$HOME/.cache/jelly/Covers"
+PREVIEW_SCRIPT="$HOME/.local/share/jelly/jelly-preview"
+PREVIEW_CHECKSUM="$HOME/.local/share/jelly/.chksm"
+
+VERSION="3.4.2"
+
+case "${1}" in
+-v | --version)
+  echo "Jelly v$VERSION"
+  exit 0
+  ;;
+esac
 
 for cmd in chafa curl fzf jq mpv socat; do
   if ! command -v "$cmd" &>/dev/null; then
@@ -171,10 +171,10 @@ if [ -z "$item_id" ]; then
 fi
 
 [ -z "$item_id" ] && item_id=$(grep -F "$title" "$data_file" 2>/dev/null | head -1 | cut -d'|' -f1)
-[ -z "$item_id" ] && echo "No preview available" && exit 0
+[ -z "$item_id" ] && exit 0
 
 user_id=$(curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users" | jq -r '.[0].Id')
-[ -z "$user_id" ] || [ "$user_id" = "null" ] && echo "Unable to fetch user ID" && exit 0
+[ -z "$user_id" ] || [ "$user_id" = "null" ] && exit 0
 
 cache_file="$cache_dir/$item_id.jpg"
 [ ! -f "$cache_file" ] || [ ! -s "$cache_file" ] && curl -s -o "$cache_file" "$server/Items/$item_id/Images/Primary?maxHeight=600&api_key=$api_key" 2>/dev/null
@@ -198,7 +198,7 @@ fi
 printf '%s\n\n' "═══════════════════════════════════════════════════════════════════"
 
 item_data=$(curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users/$user_id/Items/$item_id" 2>/dev/null)
-[ -z "$item_data" ] || [ "$item_data" = "null" ] && echo "Title: $title" && echo "Type: Unknown" && exit 0
+[ -z "$item_data" ] || [ "$item_data" = "null" ] && exit 0
 
 item_type=$(echo "$item_data" | jq -r '.Type // "Unknown"' 2>/dev/null)
 preview_width=${FZF_PREVIEW_COLUMNS:-80}
