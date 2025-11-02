@@ -469,11 +469,11 @@ edit_config_file() {
 
 main() {
   while true; do
-    main_menu_option=$(echo -e "🍿 Continue Watching\n📺 Next Up\n🎬 Recently Added Movies\n📺 Recently Added Shows\n🔍 Search\n📂 Libraries\n⚙️ Settings" | fzf)
+    main_menu_option=$(echo -e "🍿 Continue Watching\n🎞️ Next Up\n🎬 Recently Added Movies\n📺 Recently Added Shows\n🔍 Search\n📂 Libraries\n⚙️ Settings" | fzf)
     [ $? -ne 0 ] && exit 0
 
     case "$main_menu_option" in
-    "🍿 Continue Watching" | "📺 Next Up")
+    "🍿 Continue Watching" | "🎞️ Next Up")
       local fetch_func=$([ "$main_menu_option" = "🍿 Continue Watching" ] && echo "fetch_continue_watching" || echo "fetch_next_up")
       local header=$([ "$main_menu_option" = "🍿 Continue Watching" ] && echo "Continue Watching" || echo "Next Up")
       local data=$($fetch_func)
