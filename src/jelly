@@ -11,7 +11,7 @@ VERSION="3.5.0"
 DEFAULT_FZF_OPTS='
     --color=fg:#cad3f5,fg+:#cad3f5,bg:-1,bg+:-1,gutter:#24273a
     --color=header:#8aadf4,hl:#eed49f,hl+:#a6da95,query:#a6da95
-    --color=prompt:#c6a0f6,pointer:#a6da95,spinner:#f4dbd6
+    --color=prompt:#c6a0f6,pointer:#a6da95,info:#f4dbd6
     --color=border:#494d64,separator:#b7bdf8,scrollbar:#f0c6c6
     --prompt="󰥨 Search: " --pointer="❯" --separator="─" --scrollbar="│"
     --height=100% --padding=1
@@ -626,30 +626,69 @@ main() {
 
     case "$main_menu_option" in
     "🍿 Continue Watching")
-      local data=$(fetch_continue_watching)
+      while true; do
+        local data=$(fetch_continue_watching)
 
-      data_file=$(mktemp)
-      trap 'rm -f "$data_file"' RETURN
-      echo "$data" >"$data_file"
+        data_file=$(mktemp)
+        trap 'rm -f "$data_file"' RETURN
+        echo "$data" >"$data_file"
 
-      watch_list=$(echo "$data" | awk -F'|' '{if ($2 == "Episode") print "📺 " $3; else if ($2 == "Movie") print "🎬 " $3}')
-      if [ "$MEDIA_PREVIEW" = "true" ]; then
-        selected_option=$(echo "$watch_list" | fzf --header="Continue Watching" \
-          --preview "$PREVIEW_SCRIPT '$data_file' {} '$server' '$api_key' '$CACHE_DIR' '$HAS_CHAFA'" \
-          --preview-window=right:40%)
-      else
-        selected_option=$(echo "$watch_list" | fzf --header="Continue Watching")
-      fi
+        watch_list=$(echo "$data" | awk -F'|' '{if ($2 == "Episode") print "📺 " $3; else if ($2 == "Movie") print "🎬 " $3}')
+        if [ "$MEDIA_PREVIEW" = "true" ]; then
+          selected_option=$(echo "$watch_list" | fzf --header="Continue Watching" \
+            --preview "$PREVIEW_SCRIPT '$data_file' {} '$server' '$api_key' '$CACHE_DIR' '$HAS_CHAFA'" \
+            --preview-window=right:40%)
+        else
+          selected_option=$(echo "$watch_list" | fzf --header="Continue Watching")
+        fi
 
-      [ $? -ne 0 ] && continue
+        [ $? -ne 0 ] && break
 
-      title_only=$(echo "$selected_option" | sed 's/^[📺🎬] //')
-      media_id=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $1}')
-      media_type=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $2}')
-      display_name=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $3}')
-      resume_position=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $4}')
+        title_only=$(echo "$selected_option" | sed 's/^[📺🎬] //')
+        media_id=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $1}')
+        media_type=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $2}')
+        display_name=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $3}')
+        resume_position=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $4}')
 
-      if [ "$media_type" = "Episode" ]; then
+        if [ "$media_type" = "Episode" ]; then
+          media_name=$(echo "$display_name" | sed 's/^.* - //')
+          series_id=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $5}')
+          episode_num=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $6}')
+          season_num=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $7}')
+
+          if [ -n "$series_id" ] && [ "$series_id" != "null" ]; then
+            play_episode_direct_autoplay "$media_id" "$media_name" "$series_id" "$season_num" "$episode_num"
+          else
+            play_media "$media_id" "$media_name" "$resume_position" >/dev/null
+          fi
+        else
+          play_media "$media_id" "$display_name" "$resume_position" >/dev/null
+        fi
+      done
+      ;;
+
+    "🎞️ Next Up")
+      while true; do
+        local data=$(fetch_next_up)
+
+        data_file=$(mktemp)
+        trap 'rm -f "$data_file"' RETURN
+        echo "$data" >"$data_file"
+
+        watch_list=$(echo "$data" | awk -F'|' '{print "📺 " $3}')
+        if [ "$MEDIA_PREVIEW" = "true" ]; then
+          selected_option=$(echo "$watch_list" | fzf --header="Next Up" \
+            --preview "$PREVIEW_SCRIPT '$data_file' {} '$server' '$api_key' '$CACHE_DIR' '$HAS_CHAFA'" \
+            --preview-window=right:40%)
+        else
+          selected_option=$(echo "$watch_list" | fzf --header="Next Up")
+        fi
+
+        [ $? -ne 0 ] && break
+
+        title_only=$(echo "$selected_option" | sed 's/^📺 //')
+        media_id=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $1}')
+        display_name=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $3}')
         media_name=$(echo "$display_name" | sed 's/^.* - //')
         series_id=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $5}')
         episode_num=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $6}')
@@ -658,44 +697,9 @@ main() {
         if [ -n "$series_id" ] && [ "$series_id" != "null" ]; then
           play_episode_direct_autoplay "$media_id" "$media_name" "$series_id" "$season_num" "$episode_num"
         else
-          play_media "$media_id" "$media_name" "$resume_position" >/dev/null
+          play_media "$media_id" "$media_name" "0" >/dev/null
         fi
-      else
-        play_media "$media_id" "$display_name" "$resume_position" >/dev/null
-      fi
-      ;;
-
-    "🎞️ Next Up")
-      local data=$(fetch_next_up)
-
-      data_file=$(mktemp)
-      trap 'rm -f "$data_file"' RETURN
-      echo "$data" >"$data_file"
-
-      watch_list=$(echo "$data" | awk -F'|' '{print "📺 " $3}')
-      if [ "$MEDIA_PREVIEW" = "true" ]; then
-        selected_option=$(echo "$watch_list" | fzf --header="Next Up" \
-          --preview "$PREVIEW_SCRIPT '$data_file' {} '$server' '$api_key' '$CACHE_DIR' '$HAS_CHAFA'" \
-          --preview-window=right:40%)
-      else
-        selected_option=$(echo "$watch_list" | fzf --header="Next Up")
-      fi
-
-      [ $? -ne 0 ] && continue
-
-      title_only=$(echo "$selected_option" | sed 's/^📺 //')
-      media_id=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $1}')
-      display_name=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $3}')
-      media_name=$(echo "$display_name" | sed 's/^.* - //')
-      series_id=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $5}')
-      episode_num=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $6}')
-      season_num=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $7}')
-
-      if [ -n "$series_id" ] && [ "$series_id" != "null" ]; then
-        play_episode_direct_autoplay "$media_id" "$media_name" "$series_id" "$season_num" "$episode_num"
-      else
-        play_media "$media_id" "$media_name" "0" >/dev/null
-      fi
+      done
       ;;
 
     "🎲 Recommendations")
@@ -820,27 +824,29 @@ main() {
       ;;
 
     "🎬 Recently Added Movies")
-      data=$(fetch_recently_added)
-      data_file=$(mktemp)
-      trap 'rm -f "$data_file"' RETURN
-      echo "$data" >"$data_file"
+      while true; do
+        data=$(fetch_recently_added)
+        data_file=$(mktemp)
+        trap 'rm -f "$data_file"' RETURN
+        echo "$data" >"$data_file"
 
-      media_list=$(echo "$data" | awk -F'|' '{print "🎬 " $3}')
-      if [ "$MEDIA_PREVIEW" = "true" ]; then
-        selected=$(echo "$media_list" | fzf --header="Recently Added Movies" \
-          --preview "$PREVIEW_SCRIPT '$data_file' {} '$server' '$api_key' '$CACHE_DIR' '$HAS_CHAFA'" \
-          --preview-window=right:40%)
-      else
-        selected=$(echo "$media_list" | fzf --header="Recently Added Movies")
-      fi
+        media_list=$(echo "$data" | awk -F'|' '{print "🎬 " $3}')
+        if [ "$MEDIA_PREVIEW" = "true" ]; then
+          selected=$(echo "$media_list" | fzf --header="Recently Added Movies" \
+            --preview "$PREVIEW_SCRIPT '$data_file' {} '$server' '$api_key' '$CACHE_DIR' '$HAS_CHAFA'" \
+            --preview-window=right:40%)
+        else
+          selected=$(echo "$media_list" | fzf --header="Recently Added Movies")
+        fi
 
-      [ $? -ne 0 ] && continue
+        [ $? -ne 0 ] && break
 
-      title_only=$(echo "$selected" | sed 's/^🎬 //')
-      media_id=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $1}')
-      media_name=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $3}')
+        title_only=$(echo "$selected" | sed 's/^🎬 //')
+        media_id=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $1}')
+        media_name=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $3}')
 
-      play_media "$media_id" "$media_name" "0" >/dev/null
+        play_media "$media_id" "$media_name" "0" >/dev/null
+      done
       ;;
 
     "📺 Recently Added Shows")
