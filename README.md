@@ -45,6 +45,21 @@ brew tap AzureHound/jelly https://github.com/AzureHound/jelly.git
 brew install jelly
 ```
 
+#### Windows
+
+> **NOTE:** _Jelly_ requires a Linux environment.
+> Use WSL (Windows Subsystem for Linux) on Windows 10/11.
+
+##### **Open WSL Terminal** & ensure you're on Arch/Debian/Ubuntu
+
+```sh
+git clone https://github.com/AzureHound/jelly.git
+cd jelly
+chmod +x ./install.sh
+/install.sh
+cd .. && rm -rf jelly
+```
+
 #### Build from Source
 
 Arch Linux:
