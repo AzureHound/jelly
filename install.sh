@@ -17,7 +17,7 @@ if [ "$OS" = "arch" ] || [ "$OS" = "archlinux" ]; then
 
 # macOS
 elif [ "$OS" = "darwin" ]; then
-  echo "📦 macOS"
+  echo "🍎 macOS"
   brew tap AzureHound/jelly https://github.com/AzureHound/jelly.git
   brew install jelly
 
@@ -48,5 +48,5 @@ echo "✅ Installation complete!"
 if command -v jelly &>/dev/null; then
   jelly -v
 else
-  echo "🪟 Open a new terminal and run: jelly"
+  echo "🪟 Open a new terminal & run: jelly"
 fi

@@ -10,16 +10,15 @@
 - **Media Previews**: View cover images + metadata (title, year, runtime, overview) while browsing
 - **Multi-Format Support**: Stream movies & TV shows with season/episode navigation
 - **Smart Progress Tracking**: Auto-mark watched (configurable %) & save resume positions
-- **Dual Player Support**: mpv (Linux) or IINA (macOS)
 - **fzf Integration**: Smooth keyboard-driven terminal navigation with custom colors
 - **Customizable Config**: Editor, player, preview settings, progress thresholds, FZF styling
-- **Cross-Platform**: Works on Arch Linux, Debian/Ubuntu, Fedora, macOS
+- **Cross-Platform**: Works on Arch Linux, Debian/Ubuntu, macOS
 
 ### 📋 Requirements
 
 - **Jellyfin Server**: v10.8+
 - **Terminals**: Any terminal supporting ANSI colors (image previews best on kitty, xterm-kitty, or sixel-compatible terminals)
-- **Dependencies**: `chafa`, `curl`, `fzf`, `jq`, `mpv` (or `iina` on macOS), `socat`
+- **Dependencies**: `chafa curl fzf jq mpv socat`
 
 ---
 
@@ -39,42 +38,32 @@ Using `paru`:
 paru -S jelly
 ```
 
+#### macOS
+
+```sh
+brew tap AzureHound/jelly https://github.com/AzureHound/jelly.git
+brew install jelly
+```
+
 #### Build from Source
 
-1. Clone the repository & build the package:
-
-   ```sh
-   git clone https://github.com/AzureHound/jelly.git
-   cd jelly
-   makepkg -si
-   cd .. && rm -rf jelly
-   ```
-
-2. Install `chafa curl fzf jq mpv socat` [dependencies]:
-
-For Arch Linux:
+Arch Linux:
 
 ```sh
-sudo pacman -S chafa curl fzf jq mpv socat
+git clone https://github.com/AzureHound/jelly.git
+cd jelly
+makepkg -si
+cd .. && rm -rf jelly
 ```
 
-For Debian/Ubuntu:
+Debian/Ubuntu:
 
 ```sh
-sudo apt install chafa curl fzf jq mpv socat
-```
-
-For Fedora:
-
-```sh
-sudo dnf install chafa curl fzf jq mpv socat
-```
-
-For macOS:
-
-```sh
-brew install chafa curl fzf jq mpv socat
-brew install --cask iina  # Recommended media player for macOS
+git clone https://github.com/AzureHound/jelly.git
+cd jelly
+chmod +x ./install.sh
+/install.sh
+cd .. && rm -rf jelly
 ```
 
 ---
@@ -114,3 +103,7 @@ Edit it with your Jellyfin Server URL & API Key.
 ---
 
 **<p align="center">🎉 Happy Streaming!</p>**
+
+<p align="center">
+ <img src="https://raw.githubusercontent.com/catppuccin/catppuccin/main/assets/footers/gray0_ctp_on_line.svg?sanitize=true" />
+</p>
