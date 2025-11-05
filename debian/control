@@ -1,0 +1,12 @@
+Source: jelly
+Section: misc
+Priority: optional
+Maintainer: AzureHound <183492338+AzureHound@users.noreply.github.com>
+Homepage: https://github.com/AzureHound/jelly
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.1
+
+Package: jelly
+Architecture: any
+Depends: chafa, curl, fzf, jq, mpv, socat
+Description: 🪼 Explore & Stream Jellyfin via CLI

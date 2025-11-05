@@ -1,0 +1,7 @@
+#!/usr/bin/make -f
+%:
+	dh $@
+
+override_dh_auto_install:
+	mkdir -p debian/jelly/usr/bin
+	cp src/jelly debian/jelly/usr/bin/
