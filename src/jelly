@@ -3,7 +3,6 @@
 CACHE_DIR="$HOME/.cache/jelly/covers"
 CONFIG_FILE="$HOME/.config/jelly/config"
 DEFAULT_EDITOR="${EDITOR:-vim}"
-DEFAULT_MEDIA_PLAYER=$([[ "$OSTYPE" == "darwin"* ]] && echo "iina" || echo "mpv")
 PREVIEW_CHECKSUM="$HOME/.local/share/jelly/.chksm"
 PREVIEW_SCRIPT="$HOME/.local/share/jelly/preview"
 VERSION="3.5.0"
@@ -103,7 +102,6 @@ server=your_jellyfin_server_address
 api_key=your_api_key
 editor=vim
 media_preview=true
-player=mpv
 autoplay_next_episode=true
 mark_continue_percentage=5
 mark_watched_percentage=95
@@ -116,7 +114,7 @@ EOL
 fi
 
 needs_update=false
-for field in server api_key editor media_preview player autoplay_next_episode mark_continue_percentage mark_watched_percentage FZF_DEFAULT_OPTS; do
+for field in server api_key editor media_preview autoplay_next_episode mark_continue_percentage mark_watched_percentage FZF_DEFAULT_OPTS; do
   if ! grep -q "^${field}=" "$CONFIG_FILE" 2>/dev/null || [ "$(grep -c "^${field}=" "$CONFIG_FILE")" -gt 1 ]; then
     needs_update=true
     break
@@ -133,7 +131,6 @@ if [ "$needs_update" = true ]; then
   api_key_val=$(grep "^api_key=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   editor_val=$(grep "^editor=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   media_preview_val=$(grep "^media_preview=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
-  player_val=$(grep "^player=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   autoplay_val=$(grep "^autoplay_next_episode=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)
   min_progress_val=$(grep "^mark_continue_percentage=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)
   watched_val=$(grep "^mark_watched_percentage=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)
@@ -142,7 +139,6 @@ if [ "$needs_update" = true ]; then
   [ -z "$api_key_val" ] && api_key_val="your_api_key"
   [ -z "$editor_val" ] && editor_val="vim"
   [ -z "$media_preview_val" ] && media_preview_val="true"
-  [ -z "$player_val" ] && player_val="mpv"
   [ -z "$autoplay_val" ] && autoplay_val="true"
   [ -z "$min_progress_val" ] && min_progress_val="5"
   [ -z "$watched_val" ] && watched_val="95"
@@ -152,7 +148,6 @@ if [ "$needs_update" = true ]; then
     echo "api_key=$api_key_val"
     echo "editor=$editor_val"
     echo "media_preview=$media_preview_val"
-    echo "player=$player_val"
     echo "autoplay_next_episode=$autoplay_val"
     echo "mark_continue_percentage=$min_progress_val"
     echo "mark_watched_percentage=$watched_val"
@@ -179,7 +174,6 @@ server=$(grep "^server=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
 api_key=$(grep "^api_key=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
 editor=$(grep "^editor=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
 media_preview=$(grep "^media_preview=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
-player=$(grep "^player=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
 autoplay_next=$(grep "^autoplay_next_episode=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)
 mark_continue=$(grep "^mark_continue_percentage=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)
 mark_watched=$(grep "^mark_watched_percentage=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)
@@ -187,7 +181,6 @@ mark_watched=$(grep "^mark_watched_percentage=" "$CONFIG_FILE" 2>/dev/null | hea
 eval "$(grep -A 100 "^FZF_DEFAULT_OPTS=" "$CONFIG_FILE" 2>/dev/null | sed -n "/^FZF_DEFAULT_OPTS=/,/'$/p")"
 
 EDITOR=${editor:-vim}
-MEDIA_PLAYER=${player:-$DEFAULT_MEDIA_PLAYER}
 MEDIA_PREVIEW=${media_preview:-true}
 AUTOPLAY_NEXT=${autoplay_next:-true}
 MIN_PROGRESS_PERCENT=${mark_continue:-5}
@@ -196,8 +189,8 @@ WATCHED_PERCENT=${mark_watched:-95}
 
 HAS_CHAFA=$(command -v chafa &>/dev/null && echo "true" || echo "false")
 
-if ! command -v "$MEDIA_PLAYER" &>/dev/null; then
-  echo -e "\033[31mError:\033[0m '$MEDIA_PLAYER' is not installed."
+if ! command -v "mpv" &>/dev/null; then
+  echo -e "\033[31mError:\033[0m 'mpv' is not installed."
   exit 1
 fi
 
@@ -493,39 +486,34 @@ play_media() {
 
   start_playback_session "$id"
 
-  if [ "$MEDIA_PLAYER" = "iina" ]; then
-    open -a IINA "$playback_url" --args --start-time="$resume_position" --force-media-title="$name"
+  mpv "$playback_url" --start="$resume_position" --force-media-title="$name" \
+    --force-seekable=yes --demuxer-lavf-o=fflags=+genpts \
+    --demuxer-lavf-probe-info=nostreams --demuxer-max-bytes=500MiB \
+    --cache=yes --cache-secs=60 --stream-lavf-o=reconnect_streamed=1 \
+    --stream-lavf-o=reconnect_delay_max=4 --input-ipc-server="$socket_path" \
+    --quiet --no-terminal &
+  mpv_pid=$!
+
+  (
     sleep 2
-  else
-    mpv "$playback_url" --start="$resume_position" --force-media-title="$name" \
-      --force-seekable=yes --demuxer-lavf-o=fflags=+genpts \
-      --demuxer-lavf-probe-info=nostreams --demuxer-max-bytes=500MiB \
-      --cache=yes --cache-secs=60 --stream-lavf-o=reconnect_streamed=1 \
-      --stream-lavf-o=reconnect_delay_max=4 --input-ipc-server="$socket_path" \
-      --quiet --no-terminal &
-    mpv_pid=$!
-
-    (
+    while kill -0 $mpv_pid 2>/dev/null; do
+      if [ -S "$socket_path" ]; then
+        position=$(echo '{ "command": ["get_property", "playback-time"] }' | socat - "$socket_path" 2>/dev/null | grep -o '"data":[0-9.]*' | sed 's/"data"://g')
+        [[ "$position" =~ ^[0-9]+(\.[0-9]+)?$ ]] && final_position=$position && report_progress "$id" "$position" "false" && echo "$final_position" >"/tmp/jelly_pos_$$"
+      fi
       sleep 2
-      while kill -0 $mpv_pid 2>/dev/null; do
-        if [ -S "$socket_path" ]; then
-          position=$(echo '{ "command": ["get_property", "playback-time"] }' | socat - "$socket_path" 2>/dev/null | grep -o '"data":[0-9.]*' | sed 's/"data"://g')
-          [[ "$position" =~ ^[0-9]+(\.[0-9]+)?$ ]] && final_position=$position && report_progress "$id" "$position" "false" && echo "$final_position" >"/tmp/jelly_pos_$$"
-        fi
-        sleep 2
-      done
-      stop_playback_session "$id" "$final_position"
-    ) &
+    done
+    stop_playback_session "$id" "$final_position"
+  ) &
 
-    wait $mpv_pid
+  wait $mpv_pid
 
-    if [ -f "/tmp/jelly_pos_$$" ]; then
-      final_position=$(cat "/tmp/jelly_pos_$$")
-      rm -f "/tmp/jelly_pos_$$"
-    fi
-
-    rm -f "$socket_path"
+  if [ -f "/tmp/jelly_pos_$$" ]; then
+    final_position=$(cat "/tmp/jelly_pos_$$")
+    rm -f "/tmp/jelly_pos_$$"
   fi
+
+  rm -f "$socket_path"
 
   local user_id=$(fetch_user_id)
   local runtime=$(curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users/$user_id/Items/$id" 2>/dev/null | jq -r '.RunTimeTicks // 0')
@@ -599,14 +587,12 @@ edit_config_file() {
   api_key=$(grep "^api_key=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   editor=$(grep "^editor=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   media_preview=$(grep "^media_preview=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
-  player=$(grep "^player=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   autoplay_next=$(grep "^autoplay_next_episode=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)
   mark_continue=$(grep "^mark_continue_percentage=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)
   mark_watched=$(grep "^mark_watched_percentage=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)
 
   eval "$(grep -A 100 "^FZF_DEFAULT_OPTS=" "$CONFIG_FILE" 2>/dev/null | sed -n "/^FZF_DEFAULT_OPTS=/,/'$/p")"
 
-  MEDIA_PLAYER=${player:-$DEFAULT_MEDIA_PLAYER}
   MEDIA_PREVIEW=${media_preview:-true}
   EDITOR=${editor:-vim}
   AUTOPLAY_NEXT=${autoplay_next:-true}
