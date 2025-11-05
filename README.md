@@ -48,6 +48,7 @@ brew install jelly
 #### Windows
 
 > **NOTE:** _Jelly_ requires a Linux environment.
+>
 > Use WSL (Windows Subsystem for Linux) on Windows 10/11.
 
 ##### **Open WSL Terminal** & ensure you're on Arch/Debian/Ubuntu
@@ -100,6 +101,12 @@ Edit it with your Jellyfin Server URL & API Key.
 2. Go to **Dashboard** > **API Keys**.
 3. Click **+**, add a description (e.g., "Jelly"), and **Generate**.
 4. Copy the API key and paste it into your config file in `api_key`.
+
+> [!TIP]
+>
+> **Tiling Window Manager users can use keybind**
+>
+> `bind = $hyper, J, exec, hyprctl dispatch exec "[size 90% 90%; center 1; float] $term jelly"`
 
 ### 📖 Wiki
 
