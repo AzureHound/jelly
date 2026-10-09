@@ -233,7 +233,7 @@ fi
 
 [ -z "$item_id" ] && exit 0
 
-user_id=$(curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users" 2>/dev/null | jq -r '.[0].Id' 2>/dev/null)
+user_id=$(curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" "$server/Users" 2>/dev/null | jq -r '.[0].Id' 2>/dev/null)
 [ -z "$user_id" ] || [ "$user_id" = "null" ] && exit 0
 
 cache_file="$cache_dir/$item_id.jpg"
@@ -259,7 +259,7 @@ fi
 
 printf '\033[38;2;138;173;244m%s\033[0m\n\n' "═══════════════════════════════════════════════════════════════════"
 
-item_data=$(curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users/$user_id/Items/$item_id" 2>/dev/null)
+item_data=$(curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" "$server/Users/$user_id/Items/$item_id" 2>/dev/null)
 [ -z "$item_data" ] || [ "$item_data" = "null" ] && exit 0
 
 item_type=$(echo "$item_data" | jq -r '.Type // "Unknown"' 2>/dev/null)
@@ -271,7 +271,7 @@ if [ "$item_type" = "Season" ]; then
   if [ -z "$year" ] || [ "$year" = "null" ] || [ "$year" = "" ]; then
     series_id=$(echo "$item_data" | jq -r '.SeriesId // empty' 2>/dev/null)
     if [ -n "$series_id" ] && [ "$series_id" != "null" ]; then
-      first_episode=$(curl -s -X GET -H "X-Emby-Token: $api_key" \
+      first_episode=$(curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" \
         "$server/Shows/$series_id/Episodes?SeasonId=$item_id&UserId=$user_id&Limit=1&Fields=PremiereDate,ProductionYear" 2>/dev/null)
       year=$(echo "$first_episode" | jq -r '.Items[0] | (.PremiereDate // .ProductionYear // empty) | tostring | split("-")[0]' 2>/dev/null)
     fi
@@ -328,19 +328,19 @@ fetch_user_id() {
     echo "$USER_ID_CACHE"
     return
   fi
-  USER_ID_CACHE=$(curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users" | jq -r '.[0].Id')
+  USER_ID_CACHE=$(curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" "$server/Users" | jq -r '.[0].Id')
   echo "$USER_ID_CACHE"
 }
 
 fetch_continue_watching() {
   local user_id=$(fetch_user_id)
-  curl -s -X GET -H "X-Emby-Token: $api_key" \
+  curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" \
     "$server/Users/$user_id/Items/Resume" | jq -r '.Items[] | if .Type == "Episode" then "\(.Id)|\(.Type)|\(.SeriesName) - \(.Name)|\(.UserData.PlaybackPositionTicks|tonumber / 10000000)|\(.SeriesId)|\(.IndexNumber)|\(.ParentIndexNumber)" else "\(.Id)|\(.Type)|\(.Name)|\(.UserData.PlaybackPositionTicks|tonumber / 10000000)" end'
 }
 
 fetch_next_up() {
   local user_id=$(fetch_user_id)
-  curl -s -X GET -H "X-Emby-Token: $api_key" \
+  curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" \
     "$server/Shows/NextUp?UserId=$user_id" | jq -r '.Items[] | "\(.Id)|\(.Type)|\(.SeriesName) - \(.Name)|\(.UserData.PlaybackPositionTicks|tonumber / 10000000)|\(.SeriesId)|\(.IndexNumber)|\(.ParentIndexNumber)"'
 }
 
@@ -350,26 +350,26 @@ fetch_recommendations() {
     return
   fi
   local user_id=$(fetch_user_id)
-  RECOMMENDATIONS_CACHE=$(curl -s -X GET -H "X-Emby-Token: $api_key" \
+  RECOMMENDATIONS_CACHE=$(curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" \
     "$server/Users/$user_id/Items?IncludeItemTypes=Movie,Series&Limit=100&Recursive=true&StartIndex=$RECOMMENDATIONS_SEED" | jq -r '.Items[] | "\(.Id)|\(.Type)|\(.Name)"')
   echo "$RECOMMENDATIONS_CACHE"
 }
 
 fetch_recently_added() {
   local user_id=$(fetch_user_id)
-  curl -s -X GET -H "X-Emby-Token: $api_key" \
+  curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" \
     "$server/Users/$user_id/Items?SortBy=DateCreated&SortOrder=Descending&IncludeItemTypes=Movie&Limit=50&Recursive=true&IsPlayed=false" | jq -r '.Items[] | "\(.Id)|\(.Type)|\(.Name)"'
 }
 
 fetch_recently_added_shows() {
   local user_id=$(fetch_user_id)
-  curl -s -X GET -H "X-Emby-Token: $api_key" \
+  curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" \
     "$server/Users/$user_id/Items?SortBy=DateCreated&SortOrder=Descending&IncludeItemTypes=Series&Limit=50&Recursive=true&IsPlayed=false" | jq -r '.Items[] | "\(.Id)|\(.Type)|\(.Name)"'
 }
 
 fetch_libraries() {
   local user_id=$(fetch_user_id)
-  curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users/$user_id/Views" | jq -r '.Items[] | select(.CollectionType != "boxsets") | "\(.Id)|\(.Name)"'
+  curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" "$server/Users/$user_id/Views" | jq -r '.Items[] | select(.CollectionType != "boxsets") | "\(.Id)|\(.Name)"'
 }
 
 get_libraries_cached() {
@@ -380,12 +380,12 @@ get_libraries_cached() {
 }
 
 fetch_media() {
-  curl -s -X GET -H "X-Emby-Token: $api_key" \
+  curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" \
     "$server/Items?ParentId=$1&IncludeItemTypes=Movie,Series&Recursive=true" | jq -r '.Items[] | "\(.Id)|\(.Type)|\(.Name)"'
 }
 
 fetch_seasons() {
-  curl -s -X GET -H "X-Emby-Token: $api_key" \
+  curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" \
     "$server/Shows/$1/Seasons?UserId=$(fetch_user_id)" | jq -r '.Items[] | "\(.Id)|\(.Name)|\(.IndexNumber)"'
 }
 
@@ -394,11 +394,11 @@ fetch_episodes() {
   local season_id=$2
 
   if [ -n "$season_id" ]; then
-    curl -s -X GET -H "X-Emby-Token: $api_key" \
+    curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" \
       "$server/Shows/$series_id/Episodes?SeasonId=$season_id&UserId=$(fetch_user_id)" |
       jq -r '.Items[] | "\(.Id)|\(.Name)|\(.IndexNumber)|\(.ParentIndexNumber)"'
   else
-    curl -s -X GET -H "X-Emby-Token: $api_key" \
+    curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" \
       "$server/Shows/$series_id/Episodes?UserId=$(fetch_user_id)" |
       jq -r '.Items[] | "\(.Id)|\(.Name)|\(.IndexNumber)|\(.ParentIndexNumber)"'
   fi
@@ -406,14 +406,14 @@ fetch_episodes() {
 
 get_playback_progress() {
   local user_id=$(fetch_user_id)
-  local progress=$(curl -s -X GET -H "X-Emby-Token: $api_key" \
+  local progress=$(curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" \
     "$server/Users/$user_id/Items/$1" | jq '.UserData.PlaybackPositionTicks // 0')
   awk -v ticks="$progress" 'BEGIN { printf "%.0f", ticks / 10000000 }'
 }
 
 start_playback_session() {
   local user_id=$(fetch_user_id)
-  curl -s -X POST -H "X-Emby-Token: $api_key" -H "X-Emby-Client: Jelly" \
+  curl -s -X POST -H "Authorization: MediaBrowser Token=$api_key" -H "X-Emby-Client: Jelly" \
     -H "X-Emby-Device-Name: $(uname -n)" -H "X-Emby-Device-Id: $(uname -n)-$$" \
     -H "X-Emby-Client-Version: 1.0" -H "Content-Type: application/json" \
     -d "{\"UserId\":\"$user_id\",\"ItemId\":\"$1\",\"PlaySessionId\":\"jelly-$1-$$\",\"CanSeek\":true,\"IsPaused\":false,\"IsMuted\":false,\"VolumeLevel\":100}" \
@@ -423,7 +423,7 @@ start_playback_session() {
 report_progress() {
   local user_id=$(fetch_user_id)
   local position_ticks=$(awk -v seconds="$2" 'BEGIN { printf "%.0f", seconds * 10000000 }')
-  local runtime=$(curl -s -X GET -H "X-Emby-Token: $api_key" \
+  local runtime=$(curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" \
     "$server/Users/$user_id/Items/$1" | jq '.RunTimeTicks // 0')
   local completion_percent=0
 
@@ -438,12 +438,12 @@ report_progress() {
       final_position=0
     fi
 
-    curl -s -X POST -H "X-Emby-Token: $api_key" -H "Content-Type: application/json" \
+    curl -s -X POST -H "Authorization: MediaBrowser Token=$api_key" -H "Content-Type: application/json" \
       -d "{\"PlaybackPositionTicks\":$final_position,\"Played\":$played_status}" \
       "$server/Users/$user_id/Items/$1/UserData" >/dev/null 2>&1
   fi
 
-  curl -s -X POST -H "X-Emby-Token: $api_key" -H "X-Emby-Client: Jelly" \
+  curl -s -X POST -H "Authorization: MediaBrowser Token=$api_key" -H "X-Emby-Client: Jelly" \
     -H "X-Emby-Device-Name: $(uname -n)" -H "X-Emby-Device-Id: $(uname -n)-$$" \
     -H "X-Emby-Client-Version: 1.0" -H "Content-Type: application/json" \
     -d "{\"UserId\":\"$user_id\",\"ItemId\":\"$1\",\"PlaySessionId\":\"jelly-$1-$$\",\"PositionTicks\":$position_ticks,\"IsPaused\":${3:-false},\"EventName\":\"timeupdate\"}" \
@@ -454,7 +454,7 @@ stop_playback_session() {
   local user_id=$(fetch_user_id)
   local position_ticks=$(awk -v seconds="$2" 'BEGIN { printf "%.0f", seconds * 10000000 }')
 
-  curl -s -X POST -H "X-Emby-Token: $api_key" -H "X-Emby-Client: Jelly" \
+  curl -s -X POST -H "Authorization: MediaBrowser Token=$api_key" -H "X-Emby-Client: Jelly" \
     -H "X-Emby-Device-Name: $(uname -n)" -H "X-Emby-Device-Id: $(uname -n)-$$" \
     -H "X-Emby-Client-Version: 1.0" -H "Content-Type: application/json" \
     -d "{\"UserId\":\"$user_id\",\"ItemId\":\"$1\",\"PlaySessionId\":\"jelly-$1-$$\",\"PositionTicks\":$position_ticks}" \
@@ -465,7 +465,7 @@ play_media() {
   local id=$1
   local name=$2
   local resume_position=${3:-0}
-  local playback_url="$server/Videos/$id/stream?X-Emby-Token=$api_key&Static=true"
+  local playback_url="$server/Videos/$id/stream?api_key=$api_key&Static=true"
   local socket_path="/tmp/mpv-socket-$$"
   local final_position=0
 
@@ -516,7 +516,7 @@ play_media() {
   rm -f "$socket_path"
 
   local user_id=$(fetch_user_id)
-  local runtime=$(curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Users/$user_id/Items/$id" 2>/dev/null | jq -r '.RunTimeTicks // 0')
+  local runtime=$(curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" "$server/Users/$user_id/Items/$id" 2>/dev/null | jq -r '.RunTimeTicks // 0')
   local position_ticks=$(awk -v sec="$final_position" 'BEGIN { printf "%.0f", sec * 10000000 }')
   local completion_percent=0
   [ "$runtime" -gt 0 ] && completion_percent=$(awk -v pos="$position_ticks" -v total="$runtime" 'BEGIN { printf "%.0f", (pos / total) * 100 }')
@@ -557,7 +557,7 @@ play_episode_direct_autoplay() {
   local completion=$(play_media "$episode_id" "$episode_name" "0")
 
   if [ "$AUTOPLAY_NEXT" = "true" ] && [ "$completion" -ge 80 ] && [ -n "$series_id" ] && [ -n "$season_num" ]; then
-    local season_id=$(curl -s -X GET -H "X-Emby-Token: $api_key" "$server/Shows/$series_id/Seasons?UserId=$(fetch_user_id)" 2>/dev/null | jq -r ".Items[] | select(.IndexNumber == $season_num) | .Id" | head -1)
+    local season_id=$(curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" "$server/Shows/$series_id/Seasons?UserId=$(fetch_user_id)" 2>/dev/null | jq -r ".Items[] | select(.IndexNumber == $season_num) | .Id" | head -1)
 
     if [ -n "$season_id" ]; then
       local episodes_data=$(fetch_episodes "$series_id" "$season_id")
@@ -858,7 +858,7 @@ main() {
         media_name=$(echo "$data" | grep -F "$title_only" | head -1 | awk -F'|' '{print $3}')
 
         user_id=$(fetch_user_id)
-        seasons_data=$(curl -s -X GET -H "X-Emby-Token: $api_key" \
+        seasons_data=$(curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" \
           "$server/Shows/$media_id/Seasons?UserId=$user_id" | jq -r '.Items[] | "\(.Id)|\(.Name)|\(.IndexNumber)"')
 
         season_count=$(echo "$seasons_data" | grep -v "^$" | wc -l)
@@ -868,7 +868,7 @@ main() {
           season_info=$(echo "$seasons_data" | awk -F'|' '{if ($3 == "null") printf "Special: %s", $2; else printf "Season %s", $3}')
 
           while true; do
-            episodes_data=$(curl -s -X GET -H "X-Emby-Token: $api_key" \
+            episodes_data=$(curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" \
               "$server/Shows/$media_id/Episodes?SeasonId=$season_id&UserId=$user_id" | jq -r '.Items[] | "\(.Id)|\(.Name)|\(.IndexNumber)|\(.ParentIndexNumber)"')
 
             episodes_list=$(echo "$episodes_data" | awk -F'|' '{if ($3 && $3 != "null") printf "E%02d: %s\n", $3, $2}')
@@ -908,7 +908,7 @@ main() {
 
             seasons_list=$(echo "$seasons_data" | while read line; do
               season_id=$(echo "$line" | cut -d'|' -f1)
-              unwatched=$(curl -s -X GET -H "X-Emby-Token: $api_key" \
+              unwatched=$(curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" \
                 "$server/Shows/$media_id/Episodes?SeasonId=$season_id&UserId=$user_id" | jq -r '.Items[] | select(.UserData.Played == false)' | wc -l)
               if [ "$unwatched" -gt 0 ]; then
                 echo "$line" | awk -F'|' '{if ($3 == "null") printf "📂 Special: %s\n", $2; else printf "📂 Season %s\n", $3}'
@@ -941,7 +941,7 @@ main() {
             fi
 
             while true; do
-              episodes_data=$(curl -s -X GET -H "X-Emby-Token: $api_key" \
+              episodes_data=$(curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" \
                 "$server/Shows/$media_id/Episodes?SeasonId=$season_id&UserId=$user_id" | jq -r '.Items[] | "\(.Id)|\(.Name)|\(.IndexNumber)|\(.ParentIndexNumber)"')
 
               episodes_list=$(echo "$episodes_data" | awk -F'|' '{if ($3 && $3 != "null") printf "E%02d: %s\n", $3, $2}')
