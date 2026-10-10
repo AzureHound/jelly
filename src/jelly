@@ -248,7 +248,7 @@ if [ -f "$cache_file" ] && [ -s "$cache_file" ] && [ "$has_chafa" = "true" ]; th
   [ "$image_height" -gt 22 ] && image_height=22
   [ "$image_height" -lt 16 ] && image_height=16
 
-  if [[ "$TERM" == "xterm-kitty" ]] || [[ "$TERM" == "kitty" ]]; then
+  if [[ "$TERM" == *"kitty"* ]] || [[ "$TERM" == *"ghostty"* ]] || [[ "$TERM_PROGRAM" == "ghostty" ]]; then
     chafa --format=kitty --size="${preview_width}x${image_height}" "$cache_file" 2>/dev/null
   else
     chafa --format=sixel --size="${preview_width}x${image_height}" "$cache_file" 2>/dev/null
