@@ -1,3 +1,9 @@
+jelly (3.5.1-1) unstable; urgency=medium
+
+  * Bump version to 3.5.1
+
+ -- AzureHound <183492338+AzureHound@users.noreply.github.com>  Mon, 12 Oct 2026 21:40:00 +0530
+
 jelly (3.5.0-1ubuntu1) jammy; urgency=medium
 
   * Added Autoplay Next Episode
