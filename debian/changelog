@@ -1,8 +1,9 @@
-jelly (3.5.1-1) unstable; urgency=medium
+jelly (3.5.2-1) unstable; urgency=medium
 
-  * Bump version to 3.5.1
+  * version bump to 3.5.2
+  * feat(user-management): add multi-user support via config
 
- -- AzureHound <183492338+AzureHound@users.noreply.github.com>  Mon, 12 Oct 2026 21:40:00 +0530
+ -- AzureHound <183492338+AzureHound@users.noreply.github.com>  Sat, 24 Oct 2026 14:30:00 +0530
 
 jelly (3.5.0-1ubuntu1) jammy; urgency=medium
 

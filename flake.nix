@@ -64,6 +64,7 @@
           configFileContent = apiKey: ''
             server=${cfg.server}
             api_key=${apiKey}
+            user=${cfg.user}
             editor=${cfg.editor}
             media_preview=${lib.boolToString cfg.mediaPreview}
             autoplay_next_episode=${lib.boolToString cfg.autoplayNextEpisode}
@@ -91,6 +92,10 @@
             apiKeySopsSecret = lib.mkOption {
               type = lib.types.nullOr lib.types.str;
               default = null;
+            };
+            user = lib.mkOption {
+              type = lib.types.str;
+              default = "your_username";
             };
             editor = lib.mkOption {
               type = lib.types.str;

@@ -5,7 +5,7 @@ CONFIG_FILE="$HOME/.config/jelly/config"
 DEFAULT_EDITOR="${EDITOR:-vim}"
 PREVIEW_CHECKSUM="$HOME/.local/share/jelly/.chksm"
 PREVIEW_SCRIPT="$HOME/.local/share/jelly/preview"
-VERSION="3.5.0"
+VERSION="3.5.2"
 
 DEFAULT_FZF_OPTS='
     --color=fg:#cad3f5,fg+:#cad3f5,bg:-1,bg+:-1,gutter:#24273a
@@ -49,6 +49,8 @@ migrate)
 
     server_val=$(grep "^server=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
     api_key_val=$(grep "^api_key=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+    user_val=$(grep "^user=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+    [ -z "$user_val" ] && user_val="your_username"
 
     if [ -z "$server_val" ] || [ -z "$api_key_val" ]; then
       echo -e "\033[31mError:\033[0m Config missing 'server' or 'api_key'"
@@ -59,6 +61,7 @@ migrate)
     {
       echo "server=$server_val"
       echo "api_key=$api_key_val"
+      echo "user=$user_val"
     } >"$temp_config"
 
     mv "$temp_config" "$CONFIG_FILE"
@@ -100,6 +103,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
   cat >"$CONFIG_FILE" <<EOL
 server=your_jellyfin_server_address
 api_key=your_api_key
+user=your_username
 editor=vim
 media_preview=true
 autoplay_next_episode=true
@@ -109,12 +113,12 @@ mark_watched_percentage=95
 # FZF
 FZF_DEFAULT_OPTS='$DEFAULT_FZF_OPTS'
 EOL
-  echo -e "\033[33mUpdate your Server URL & API Key.\033[0m"
+  echo -e "\033[33mUpdate your Server URL, API Key & Username.\033[0m"
   exit 1
 fi
 
 needs_update=false
-for field in server api_key editor media_preview autoplay_next_episode mark_continue_percentage mark_watched_percentage FZF_DEFAULT_OPTS; do
+for field in server api_key user editor media_preview autoplay_next_episode mark_continue_percentage mark_watched_percentage FZF_DEFAULT_OPTS; do
   if ! grep -q "^${field}=" "$CONFIG_FILE" 2>/dev/null || [ "$(grep -c "^${field}=" "$CONFIG_FILE")" -gt 1 ]; then
     needs_update=true
     break
@@ -129,6 +133,8 @@ if [ "$needs_update" = true ]; then
 
   server_val=$(grep "^server=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   api_key_val=$(grep "^api_key=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  user_val=$(grep "^user=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  [ -z "$user_val" ] && user_val="your_username"
   editor_val=$(grep "^editor=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   media_preview_val=$(grep "^media_preview=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   autoplay_val=$(grep "^autoplay_next_episode=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)
@@ -146,6 +152,7 @@ if [ "$needs_update" = true ]; then
   {
     echo "server=$server_val"
     echo "api_key=$api_key_val"
+    echo "user=$user_val"
     echo "editor=$editor_val"
     echo "media_preview=$media_preview_val"
     echo "autoplay_next_episode=$autoplay_val"
@@ -172,6 +179,7 @@ fi
 
 server=$(grep "^server=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
 api_key=$(grep "^api_key=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+user=$(grep "^user=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
 editor=$(grep "^editor=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
 media_preview=$(grep "^media_preview=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
 autoplay_next=$(grep "^autoplay_next_episode=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)
@@ -233,7 +241,8 @@ fi
 
 [ -z "$item_id" ] && exit 0
 
-user_id=$(curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" "$server/Users" 2>/dev/null | jq -r '.[0].Id' 2>/dev/null)
+user_name=$(grep "^user=" "$HOME/.config/jelly/config" 2>/dev/null | head -1 | cut -d'=' -f2-)
+user_id=$(curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" "$server/Users" 2>/dev/null | jq -r --arg u "$user_name" '.[] | select(.Name == $u) | .Id' 2>/dev/null)
 [ -z "$user_id" ] || [ "$user_id" = "null" ] && exit 0
 
 cache_file="$cache_dir/$item_id.jpg"
@@ -328,7 +337,7 @@ fetch_user_id() {
     echo "$USER_ID_CACHE"
     return
   fi
-  USER_ID_CACHE=$(curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" "$server/Users" | jq -r '.[0].Id')
+  USER_ID_CACHE=$(curl -s -X GET -H "Authorization: MediaBrowser Token=$api_key" "$server/Users" | jq -r --arg u "$user" '.[] | select(.Name == $u) | .Id')
   echo "$USER_ID_CACHE"
 }
 
@@ -585,6 +594,7 @@ edit_config_file() {
 
   server=$(grep "^server=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   api_key=$(grep "^api_key=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  user=$(grep "^user=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   editor=$(grep "^editor=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   media_preview=$(grep "^media_preview=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   autoplay_next=$(grep "^autoplay_next_episode=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/ *#.*//' | xargs)

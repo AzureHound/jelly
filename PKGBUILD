@@ -1,6 +1,6 @@
 # Maintainer: AzureHound <183492338+AzureHound@users.noreply.github.com>
 pkgname=jelly
-pkgver=3.5.1
+pkgver=3.5.2
 pkgrel=1
 pkgdesc="🪼 Explore & Stream Jellyfin via CLI"
 arch=('any')
